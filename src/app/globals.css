@@ -1,0 +1,288 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 142 76% 36%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 9.4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 11.8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 9.4%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 142 76% 36%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@font-face {
+  font-family: custom-font;
+  font-weight: 500;
+  font-style: normal;
+  src: url(/fonts/CustomFont-Medium.woff2) format('woff2');
+}
+
+html {
+  font-family: custom-font, BlinkMacSystemFont, -apple-system, Segoe UI, Roboto,
+    Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, Helvetica,
+    Arial, sans-serif;
+}
+
+input[type='color'] {
+  -webkit-appearance: none;
+  border: none;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  @apply dark:bg-dark-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 dark:bg-gray-700;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2a2a2a;
+}
+
+::-moz-selection {
+  @apply text-white bg-green-500;
+}
+::selection {
+  @apply text-white bg-green-500;
+}
+
+@layer components {
+  .btn {
+    @apply p-3 flex rounded-md bg-gray-300 dark:bg-dark-800 border-2 dark:border-dark-border cursor-pointer hover:bg-gray-200 dark:hover:bg-dark-600 focus:outline-none transition duration-300 ease-in;
+  }
+
+  .btn-green {
+    @apply bg-green-500 text-white rounded-md px-4 py-0 h-8 text-sm font-medium hover:bg-green-600 focus:outline-none focus:ring focus:ring-green-600;
+  }
+
+  .selection-area {
+    background: rgba(16, 185, 129, 0.055);
+    border: 2px solid rgb(16, 185, 129);
+    border-radius: 0.1em;
+  }
+
+  .selected {
+    @apply !border-green-500;
+  }
+
+  .container {
+    @apply !max-w-none;
+  }
+}
+
+/* Tooltip styles */
+[tooltip] {
+  position: relative;
+}
+
+[tooltip] > * {
+  display: inline-block;
+}
+
+[tooltip]:before,
+[tooltip]:after {
+  text-transform: none;
+  font-size: 0.9em;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+  position: absolute;
+  display: none;
+  opacity: 0;
+}
+
+[tooltip]:before {
+  content: '';
+  border: 5px solid transparent;
+  z-index: 1001;
+}
+
+[tooltip]:after {
+  content: attr(tooltip);
+  text-align: center;
+  min-width: 3em;
+  max-width: 21em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.3rem;
+  box-shadow: 0 1em 2em -0.5em rgba(0, 0, 0, 0.35);
+  background: #2a2a2a;
+  color: #fff;
+  z-index: 1000;
+}
+
+[tooltip]:hover:before,
+[tooltip]:hover:after {
+  display: block;
+}
+
+/* Top position (default) */
+[tooltip]:not([position]):before,
+[tooltip][position^='top']:before {
+  bottom: 100%;
+  border-bottom-width: 0;
+  border-top-color: #2a2a2a;
+}
+
+[tooltip]:not([position]):after,
+[tooltip][position^='top']::after {
+  bottom: calc(100% + 5px);
+}
+
+[tooltip]:not([position])::before,
+[tooltip]:not([position])::after,
+[tooltip][position^='top']::before,
+[tooltip][position^='top']::after {
+  left: 50%;
+  transform: translate(-50%, -0.5em);
+}
+
+/* Bottom position */
+[tooltip][position^='bottom']::before {
+  top: 105%;
+  border-top-width: 0;
+  border-bottom-color: #2a2a2a;
+}
+
+[tooltip][position^='bottom']::after {
+  top: calc(105% + 5px);
+}
+
+[tooltip][position^='bottom']::before,
+[tooltip][position^='bottom']::after {
+  left: 50%;
+  transform: translate(-50%, 0.5em);
+}
+
+/* Left position */
+[tooltip][position^='left']::before {
+  top: 50%;
+  border-right-width: 0;
+  border-left-color: #2a2a2a;
+  left: calc(0em - 5px);
+  transform: translate(-0.5em, -50%);
+}
+
+[tooltip][position^='left']::after {
+  top: 50%;
+  right: calc(100% + 5px);
+  transform: translate(-0.5em, -50%);
+}
+
+/* Right position */
+[tooltip][position^='right']::before {
+  top: 50%;
+  border-left-width: 0;
+  border-right-color: #2a2a2a;
+  right: calc(0em - 5px);
+  transform: translate(0.5em, -50%);
+}
+
+[tooltip][position^='right']::after {
+  top: 50%;
+  left: calc(100% + 5px);
+  transform: translate(0.5em, -50%);
+}
+
+/* Animations */
+[tooltip]:not([position]):hover::before,
+[tooltip]:not([position]):hover::after,
+[tooltip][position^='top']:hover::before,
+[tooltip][position^='top']:hover::after,
+[tooltip][position^='bottom']:hover::before,
+[tooltip][position^='bottom']:hover::after {
+  animation: tooltips-vert 300ms ease-out forwards;
+}
+
+[tooltip][position^='left']:hover::before,
+[tooltip][position^='left']:hover::after,
+[tooltip][position^='right']:hover::before,
+[tooltip][position^='right']:hover::after {
+  animation: tooltips-horz 300ms ease-out forwards;
+}
+
+/* Don't show empty tooltips */
+[tooltip='']::before,
+[tooltip='']::after {
+  display: none !important;
+}
+
+@keyframes tooltips-vert {
+  to {
+    opacity: 0.9;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes tooltips-horz {
+  to {
+    opacity: 0.9;
+    transform: translate(0, -50%);
+  }
+}
