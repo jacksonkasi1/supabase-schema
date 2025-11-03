@@ -15,6 +15,7 @@ import {
 import { ModalSQL } from './ModalSQL';
 import { ModalTypes } from './ModalTypes';
 import { HelperZoom } from './HelperZoom';
+import { Button } from '@/components/ui/button';
 import AES from 'crypto-js/aes';
 
 export function Helper() {
@@ -63,7 +64,7 @@ export function Helper() {
     const el = document.getElementById('screen-canvas') as HTMLElement;
     toPng(el).then((dataUrl) => {
       const link = document.createElement('a');
-      link.download = 'Supbase Schema.png';
+      link.download = 'Supabase Schema.png';
       link.href = dataUrl;
       link.click();
     });
@@ -86,54 +87,61 @@ export function Helper() {
 
   return (
     <>
-      <div className="flex items-center space-x-3 right-3.95 bottom-5 absolute z-10">
-        <button
-          className="btn"
+      <div className="fixed right-5 bottom-5 z-10 flex items-center space-x-2">
+        <Button
+          variant="outline"
+          size="icon"
           title={copied ? 'Copied' : 'Share link'}
           onClick={shareLink}
+          className={copied ? 'bg-primary text-primary-foreground' : ''}
         >
           <Share2 size={20} />
-        </button>
+        </Button>
 
-        <button
-          className="btn"
+        <Button
+          variant="outline"
+          size="icon"
           title="Export Types"
           onClick={() => setExportTypes(true)}
         >
           <FileType size={20} />
-        </button>
+        </Button>
 
-        <button
-          className="btn"
+        <Button
+          variant="outline"
+          size="icon"
           title="Export SQL"
           onClick={() => setExportSQL(true)}
         >
           <Database size={20} />
-        </button>
+        </Button>
 
-        <button
-          className="btn"
+        <Button
+          variant="outline"
+          size="icon"
           title="Take a screenshot"
           onClick={screenshot}
         >
           <Camera size={20} />
-        </button>
+        </Button>
 
-        <button
-          className="btn"
+        <Button
+          variant="outline"
+          size="icon"
           title="Auto arrange"
           onClick={handleAutoArrange}
         >
           <Sparkles size={20} />
-        </button>
+        </Button>
 
-        <button
-          className="btn"
+        <Button
+          variant="outline"
+          size="icon"
           title="Focus everything center"
           onClick={focusView}
         >
           <Target size={20} />
-        </button>
+        </Button>
 
         <HelperZoom />
       </div>

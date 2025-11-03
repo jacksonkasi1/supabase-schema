@@ -1,9 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { useClipboard } from '@/lib/hooks';
-import { createPortal } from 'react-dom';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface ModalSQLProps {
   open: boolean;
@@ -13,7 +20,6 @@ interface ModalSQLProps {
 export function ModalSQL({ open, onClose }: ModalSQLProps) {
   const { tables } = useStore();
   const { copy, copied } = useClipboard();
-  const targetRef = useRef<HTMLDivElement>(null);
 
   const reservedKeyword = [
     'user',
@@ -104,55 +110,35 @@ export function ModalSQL({ open, onClose }: ModalSQLProps) {
     return code;
   }, [tables]);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (targetRef.current && !targetRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div className="w-screen h-screen fixed top-0 left-0 flex items-center justify-center bg-light-400 dark:bg-dark-900 !bg-opacity-50 z-50">
-      <div
-        ref={targetRef}
-        className="bg-warm-gray-100 dark:bg-dark-800 w-full max-w-screen-md h-screen-sm rounded-md border-2 dark:border-dark-600 flex flex-col"
-      >
-        <div className="text-dark-100 dark:text-white p-4 border-b-2 dark:border-dark-600 flex items-center justify-between">
-          <h1 className="text-xl">Export SQL</h1>
-          <button className="btn-green" onClick={() => copy(exportedCode)}>
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
-        <div className="p-4 text-dark-100 dark:text-white h-full overflow-hidden overflow-y-auto">
-          <p className="mb-4">
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Export SQL</DialogTitle>
+            <Button onClick={() => copy(exportedCode)} size="sm">
+              {copied ? 'Copied!' : 'Copy'}
+            </Button>
+          </div>
+          <DialogDescription>
             There might be some issues with the exported code. You may submit{' '}
             <a
               href="https://github.com/zernonia/supabase-schema/issues"
               target="_blank"
-              className="underline"
+              className="underline hover:text-primary"
               rel="noreferrer"
             >
               issues here
             </a>
             .
-          </p>
-          <pre className="bg-warm-gray-200 dark:bg-dark-900 text-warm-gray-500 dark:text-white-800 text-sm rounded-md p-4 h-auto">
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          <pre className="bg-muted text-sm rounded-md p-4">
             {exportedCode}
           </pre>
         </div>
-      </div>
-    </div>,
-    document.body
+      </DialogContent>
+    </Dialog>
   );
 }

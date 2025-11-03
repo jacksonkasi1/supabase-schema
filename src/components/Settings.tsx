@@ -5,9 +5,18 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
 import { useDark } from '@/lib/hooks';
-import { InputText } from './InputText';
 import { Github, Network, Bot, Settings as SettingsIcon, Moon } from 'lucide-react';
 import Image from 'next/image';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface SettingsProps {
   isFetching: boolean;
@@ -21,7 +30,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
   const [url, setUrl] = useState(supabaseApiKey.url);
   const [anon, setAnon] = useState(supabaseApiKey.anon);
   const [error, setError] = useState('');
-  const [togglePanel, setTogglePanel] = useLocalStorage('togglePanel', true);
+  const [open, setOpen] = useState(false);
   const [isAINew, setIsAINew] = useLocalStorage('is-ai-new', true);
   const [, setDefinitions] = useLocalStorage<any>('definitions', {});
   const { toggleDark } = useDark();
@@ -62,6 +71,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
               setSupabaseApiKey(newApiKey);
               setTables(data.definitions, data.paths);
             }
+            setOpen(false);
           }
         } else {
           setError('Invalid link');
@@ -77,141 +87,152 @@ export function Settings({ setIsFetching }: SettingsProps) {
   };
 
   useEffect(() => {
-    setTogglePanel(false);
     if (pathname === '/ai') setIsAINew(false);
-  }, [pathname]);
-
-  const positionPanel = togglePanel ? '1.25rem' : '-22.5rem';
+  }, [pathname, setIsAINew]);
 
   return (
-    <menu
-      className="absolute z-1000 top-5 m-0 p-0 w-90 rounded-md border-2 dark:border-dark-border transition-right duration-500 ease-in-out"
-      style={{ right: positionPanel }}
-    >
-      <div className="relative bg-light-300 dark:bg-dark-800 p-6 rounded-md">
-        <div className="w-full flex justify-center">
-          <Image src="/logo.svg" width={128} height={128} className="h-32" alt="Supabase Schema Logo" />
-        </div>
-
-        <h1
-          style={{ WebkitTextFillColor: 'transparent' }}
-          className="mt-4 flex items-baseline text-3xl font-bold bg-gradient-to-r from-green-500 to-green-400 bg-clip-text fill-transparent"
+    <>
+      {/* Floating action buttons */}
+      <div className="fixed right-5 top-5 z-50 flex flex-col space-y-2">
+        <Button
+          variant="outline"
+          size="icon"
+          title="Schema"
+          onClick={() => router.push('/')}
+          className={pathname === '/' ? 'bg-primary text-primary-foreground' : ''}
         >
-          Supabase Schema
-          <a href="https://github.com/zernonia/supabase-schema" target="_blank" rel="noreferrer">
-            <Github className="text-lg ml-2 text-dark-500 dark:hover:text-white" size={20} />
-          </a>
-        </h1>
+          <Network size={20} />
+        </Button>
 
-        <h6 className="text-dark-500 font-medium text-sm">
-          Open Source • LocalStorage
-        </h6>
+        <Button
+          variant="outline"
+          size="icon"
+          title="AI"
+          onClick={() => router.push('/ai')}
+          className={`relative ${pathname === '/ai' ? 'bg-primary text-primary-foreground' : ''}`}
+        >
+          <Bot size={20} />
+          {isAINew && (
+            <>
+              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1 animate-ping" />
+              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1" />
+            </>
+          )}
+        </Button>
 
-        <div className="mt-4">
-          <details open>
-            <summary className="font-medium uppercase">Steps</summary>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              title="Settings"
+              className="mt-4"
+            >
+              <SettingsIcon size={20} />
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
+            <SheetHeader>
+              <div className="w-full flex justify-center mb-4">
+                <Image
+                  src="/logo.svg"
+                  width={128}
+                  height={128}
+                  alt="Supabase Schema Logo"
+                />
+              </div>
+              <SheetTitle className="text-3xl font-bold bg-gradient-to-r from-green-500 to-green-400 bg-clip-text text-transparent">
+                Supabase Schema
+              </SheetTitle>
+              <SheetDescription>
+                Open Source • LocalStorage
+              </SheetDescription>
+            </SheetHeader>
 
-            <ol className="mt-2 dark:text-white-700 ml-8 list-decimal leading-tight">
-              <li className="py-2">
-                Obtain OpenAPI URL following instruction{' '}
-                <a
-                  className="underline hover:text-green-500"
-                  target="_blank"
-                  href="https://github.com/zernonia/supabase-schema#-instructions"
-                  rel="noreferrer"
-                >
-                  here
-                </a>
-              </li>
+            <div className="flex items-center justify-center gap-4 mt-2">
+              <a
+                href="https://github.com/zernonia/supabase-schema"
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Github size={20} />
+              </a>
+            </div>
 
-              <li className="py-2">Paste the URL below</li>
+            <div className="mt-6 space-y-6">
+              <div>
+                <h3 className="font-semibold text-sm uppercase mb-2">Steps</h3>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                  <li>
+                    Obtain OpenAPI URL following instruction{' '}
+                    <a
+                      className="underline hover:text-primary"
+                      target="_blank"
+                      href="https://github.com/zernonia/supabase-schema#-instructions"
+                      rel="noreferrer"
+                    >
+                      here
+                    </a>
+                  </li>
+                  <li>Paste the URL below</li>
+                  <li>Enjoy the Supabase Schema</li>
+                </ol>
+              </div>
 
-              <li className="py-2">Enjoy the Supabase Schema</li>
-            </ol>
-          </details>
-        </div>
-
-        <form className="flex flex-col mt-4">
-          <label htmlFor="website" className="mr-2 text-sm font-medium uppercase">
-            Url
-          </label>
-
-          <InputText
-            type="text"
-            name="url"
-            placeholder="https://your-project.supabase.co"
-            value={url}
-            onChange={setUrl}
-          />
-
-          <label htmlFor="anon" className="mr-2 mt-2 text-sm font-medium uppercase">
-            API Keys
-          </label>
-
-          <InputText
-            type="text"
-            name="anon"
-            placeholder="your-anon-key"
-            value={anon}
-            onChange={setAnon}
-          />
-
-          <div className="flex justify-end mt-4">
-            <button
-              className="bg-green-500 rounded-md px-4 py-0 h-8 text-sm font-medium hover:bg-green-600 focus:outline-none focus:ring focus:ring-green-600 text-white"
-              onClick={(e) => {
+              <form className="space-y-4" onSubmit={(e) => {
                 e.preventDefault();
                 fetchData();
-              }}
-            >
-              Fetch
-            </button>
-          </div>
+              }}>
+                <div className="space-y-2">
+                  <label htmlFor="url" className="text-sm font-medium">
+                    URL
+                  </label>
+                  <Input
+                    id="url"
+                    type="text"
+                    name="url"
+                    placeholder="https://your-project.supabase.co"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                </div>
 
-          {error && <span className="text-sm text-white-900">{error}</span>}
-        </form>
+                <div className="space-y-2">
+                  <label htmlFor="anon" className="text-sm font-medium">
+                    API KEY
+                  </label>
+                  <Input
+                    id="anon"
+                    type="text"
+                    name="anon"
+                    placeholder="your-anon-key"
+                    value={anon}
+                    onChange={(e) => setAnon(e.target.value)}
+                  />
+                </div>
 
-        {/* arrow buttons */}
-        <div className="absolute right-[105%] flex flex-col space-y-2 top-0">
-          <button
-            className="btn"
-            title="Schema"
-            onClick={() => router.push('/')}
-          >
-            <Network size={20} />
-          </button>
+                <Button type="submit" className="w-full">
+                  Fetch Schema
+                </Button>
 
-          <button
-            className="btn relative"
-            title="AI"
-            onClick={() => router.push('/ai')}
-          >
-            <Bot size={20} />
-            {isAINew && (
-              <>
-                <div className="w-4 h-4 rounded-full bg-blue-500 absolute top-3.5 -left-3 animate-ping" />
-                <div className="w-4 h-4 rounded-full bg-blue-500 absolute top-3.5 -left-3" />
-              </>
-            )}
-          </button>
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
+              </form>
+            </div>
+          </SheetContent>
+        </Sheet>
 
-          <button
-            className="btn !mt-12"
-            title="Settings"
-            onClick={() => setTogglePanel(!togglePanel)}
-          >
-            <SettingsIcon size={20} />
-          </button>
-
-          <button
-            className="btn"
-            title="Toggle Dark mode"
-            onClick={toggleDark}
-          >
-            <Moon size={20} />
-          </button>
-        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          title="Toggle Dark mode"
+          onClick={toggleDark}
+        >
+          <Moon size={20} />
+        </Button>
       </div>
-    </menu>
+    </>
   );
 }
