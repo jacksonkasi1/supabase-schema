@@ -1,4 +1,4 @@
-import { OpenAIStream, OpenAIStreamPayload } from '@/lib/openai-stream';
+import { OpenAIStream, OpenAIStreamPayload, ChatGPTMessage, ChatGPTAgent } from '@/lib/openai-stream';
 
 export const runtime = 'edge';
 
@@ -11,7 +11,7 @@ export async function POST(req: Request): Promise<Response> {
     const { schema, query, chatHistory } = (await req.json()) as {
       schema?: string;
       query?: string;
-      chatHistory?: Array<{ role: string; content: string }>;
+      chatHistory?: Array<{ role: ChatGPTAgent; content: string }>;
     };
 
     if (!query) {
@@ -19,7 +19,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Build messages array with chat history
-    const messages: Array<{ role: string; content: string }> = [
+    const messages: ChatGPTMessage[] = [
       {
         role: 'system',
         content:
