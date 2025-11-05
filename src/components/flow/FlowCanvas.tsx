@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
+import { cn } from '@/lib/utils';
 import { TableNode } from './TableNode';
 import { ViewNode } from './ViewNode';
 import { CustomEdge } from './CustomEdge';
