@@ -35,12 +35,12 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
 
       {/* Columns */}
       <div className="pb-2">
-        {tableData.columns?.map((col) => {
-          // Create unique handle ID: tableName_columnName
-          const handleId = `${tableName}_${col.title}`;
+        {tableData.columns?.map((col, index) => {
+          // Create unique handle ID: tableName_columnName_index
+          const handleId = `${tableName}_${col.title}_${index}`;
 
           return (
-            <div key={col.title} className="relative">
+            <div key={`${col.title}_${index}`} className="relative">
               {/* Source Handle (right side) - for FK connections going out */}
               {col.fk && (
                 <Handle

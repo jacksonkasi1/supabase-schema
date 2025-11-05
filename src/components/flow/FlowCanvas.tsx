@@ -164,10 +164,17 @@ function FlowCanvasInner() {
         }
       }
 
-      // Space: Fit view
-      if (event.code === 'Space' && !event.target) {
-        event.preventDefault();
-        fitView({ padding: 0.2, duration: 400 });
+      // Space: Fit view (only when not typing in input fields)
+      if (event.code === 'Space') {
+        const target = event.target as HTMLElement;
+        const isInputField = target.tagName === 'INPUT' ||
+                            target.tagName === 'TEXTAREA' ||
+                            target.isContentEditable;
+
+        if (!isInputField) {
+          event.preventDefault();
+          fitView({ padding: 0.2, duration: 400 });
+        }
       }
 
       // Escape: Clear selection
@@ -325,7 +332,9 @@ function FlowCanvasInner() {
   );
 
   const handleCopyNodeId = useCallback((nodeId: string) => {
-    navigator.clipboard.writeText(nodeId);
+    navigator.clipboard.writeText(nodeId).catch((err) => {
+      console.error("Failed to copy node ID to clipboard:", err);
+    });
   }, []);
 
   const handleFocusNode = useCallback(

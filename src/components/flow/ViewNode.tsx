@@ -33,12 +33,12 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
 
       {/* Columns */}
       <div className="pb-2">
-        {viewData.columns?.map((col) => {
-          // Create unique handle ID: viewName_columnName
-          const handleId = `${viewName}_${col.title}`;
+        {viewData.columns?.map((col, index) => {
+          // Create unique handle ID: viewName_columnName_index
+          const handleId = `${viewName}_${col.title}_${index}`;
 
           return (
-            <div key={col.title} className="relative">
+            <div key={`${col.title}_${index}`} className="relative">
               {/* Source Handle (right side) - for FK connections going out */}
               {col.fk && (
                 <Handle
