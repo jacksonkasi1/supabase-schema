@@ -44,11 +44,19 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
   };
 
   const screenshot = () => {
-    const el = document.getElementById('screen-canvas') as HTMLElement;
+    // Target the ReactFlow container
+    const el = document.querySelector('.react-flow') as HTMLElement;
+
+    if (!el) {
+      console.error('ReactFlow container not found');
+      return;
+    }
+
     toPng(el, {
       skipFonts: true,
       cacheBust: true,
       pixelRatio: 2,
+      backgroundColor: '#ffffff',
     })
       .then((dataUrl) => {
         const link = document.createElement('a');
