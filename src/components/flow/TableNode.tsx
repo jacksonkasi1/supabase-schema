@@ -13,11 +13,17 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
   return (
     <div
       className={cn(
-        'rounded-md overflow-hidden bg-warm-gray-100 dark:bg-dark-700',
+        'rounded-md overflow-hidden',
+        'bg-warm-gray-100 dark:bg-dark-700',
+        'backdrop-blur-sm',
         'border-2 dark:border-dark-border transition-colors',
+        'shadow-md',
         selected && 'border-green-500 ring-2 ring-green-500/20'
       )}
-      style={{ minWidth: '200px' }}
+      style={{
+        minWidth: '200px',
+        backgroundColor: 'var(--tw-bg-opacity, 1)',
+      }}
     >
       {/* Table Header */}
       <div className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border">
