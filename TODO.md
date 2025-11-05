@@ -68,6 +68,55 @@ Phase 4 focuses on enhancing the schema visualization with professional features
   - User permissions system
   - Activity feed
 
+### ⚪ Very Low Priority (Polish & Future Enhancements)
+**Note:** These are nice-to-have features to be implemented after all phases are complete. Design and placement decisions will be finalized later.
+
+- [ ] **Hover states with pulse animation**
+  - Highlight valid connection targets when dragging
+  - Pulse animation on valid handles
+  - Visual feedback for connection validation
+  - Invalid target indication with red glow
+
+- [ ] **Connection validation messages**
+  - Toast notifications for failed connections
+  - Explain why connection was rejected
+  - Show connection rules on demand
+  - Visual feedback for validation errors
+
+- [ ] **Connection statistics panel**
+  - Total tables, views, and relationships count
+  - Orphaned tables indicator
+  - Circular dependency detection
+  - Connection health metrics
+  - Collapsible panel (position TBD)
+  - Performance metrics for large schemas
+
+- [ ] **Connection mode toggle (Future)**
+  - UI toggle for strict/flexible connection modes
+  - Persist mode preference in localStorage
+  - Tooltips explaining each mode
+  - Visual indication of current mode
+  - Note: Currently hardcoded to strict mode
+
+- [ ] **Smart connection suggestions**
+  - Detect patterns like user_id → users.id
+  - Suggest connections based on naming conventions
+  - Auto-complete for FK references
+  - ML-based relationship predictions
+
+- [ ] **Performance optimizations**
+  - Virtualize rendering for 50+ tables
+  - Lazy load nodes outside viewport
+  - Optimize re-renders with React.memo
+  - Connection pooling for large schemas
+
+- [ ] **Accessibility improvements**
+  - Keyboard navigation for connections
+  - Screen reader support
+  - ARIA labels for all interactive elements
+  - Focus management
+  - High contrast mode
+
 ---
 
 ## Implementation Order
