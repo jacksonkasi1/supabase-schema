@@ -13,13 +13,16 @@ import {
   Panel,
   useReactFlow,
   ReactFlowProvider,
+  Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
 import { TableNode } from './TableNode';
+import { CustomEdge } from './CustomEdge';
+import { RelationshipSelector } from './RelationshipSelector';
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
 import { getLayoutedNodes } from '@/lib/layout';
-import { LayoutDirection } from '@/types/flow';
+import { LayoutDirection, RelationshipType } from '@/types/flow';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid } from 'lucide-react';
 
@@ -28,20 +31,32 @@ const nodeTypes = {
   view: TableNode,
 };
 
+const edgeTypes = {
+  custom: CustomEdge,
+};
+
 function FlowCanvasInner() {
-  const { tables, updateTablePosition } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [_layoutDirection, setLayoutDirection] = useState<LayoutDirection>('TB');
+  const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
   const { fitView } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
     const flowNodes = tablesToNodes(tables);
-    const flowEdges = tablesToEdges(tables);
+    const flowEdges = tablesToEdges(tables).map((edge) => ({
+      ...edge,
+      type: 'custom',
+      data: {
+        ...edge.data,
+        relationshipType: getEdgeRelationship(edge.id),
+      },
+    }));
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [tables, setNodes, setEdges]);
+  }, [tables, setNodes, setEdges, getEdgeRelationship]);
 
   // Auto-layout function
   const onLayout = useCallback(
@@ -99,19 +114,58 @@ function FlowCanvasInner() {
 
   const onPaneClick = useCallback(() => {
     setHighlightedEdges(new Set());
+    setSelectedEdge(null);
   }, []);
+
+  // Handle edge click to show relationship selector
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      const relationshipType = getEdgeRelationship(edge.id);
+      setSelectedEdge({
+        id: edge.id,
+        type: relationshipType,
+        position: {
+          x: event.clientX,
+          y: event.clientY,
+        },
+      });
+    },
+    [getEdgeRelationship]
+  );
+
+  // Handle relationship type change
+  const handleRelationshipChange = useCallback(
+    (type: RelationshipType) => {
+      if (selectedEdge) {
+        setEdgeRelationship(selectedEdge.id, type);
+        // Update the edge data immediately
+        setEdges((eds) =>
+          eds.map((edge) =>
+            edge.id === selectedEdge.id
+              ? {
+                  ...edge,
+                  data: {
+                    ...edge.data,
+                    relationshipType: type,
+                  },
+                }
+              : edge
+          )
+        );
+      }
+    },
+    [selectedEdge, setEdgeRelationship, setEdges]
+  );
 
   // Apply highlighting to edges
   const edgesWithHighlight = useMemo(() => {
     return edges.map((edge) => ({
       ...edge,
       animated: highlightedEdges.has(edge.id),
-      style: {
-        stroke: highlightedEdges.has(edge.id) ? '#10b981' : '#94a3b8',
-        strokeWidth: highlightedEdges.has(edge.id) ? 2 : 1,
-      },
+      selected: selectedEdge?.id === edge.id,
     }));
-  }, [edges, highlightedEdges]);
+  }, [edges, highlightedEdges, selectedEdge]);
 
   return (
     <div className="w-full h-screen">
@@ -124,15 +178,16 @@ function FlowCanvasInner() {
         onNodesDelete={onNodesDelete}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}
         defaultEdgeOptions={{
-          type: 'smoothstep',
+          type: 'custom',
           animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1 },
         }}
         className="bg-white dark:bg-dark-900"
       >
@@ -173,6 +228,16 @@ function FlowCanvasInner() {
           </Button>
         </Panel>
       </ReactFlow>
+
+      {/* Relationship Selector */}
+      {selectedEdge && (
+        <RelationshipSelector
+          currentType={selectedEdge.type}
+          onSelect={handleRelationshipChange}
+          position={selectedEdge.position}
+          onClose={() => setSelectedEdge(null)}
+        />
+      )}
     </div>
   );
 }

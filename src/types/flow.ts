@@ -13,14 +13,31 @@ export type TableNode = Node<TableNodeData, 'table'>;
 export type ViewNode = Node<TableNodeData, 'view'>;
 export type FlowNode = TableNode | ViewNode;
 
+// Relationship types
+export type RelationshipType = 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many';
+
+export interface RelationshipTypeInfo {
+  label: string;
+  description: string;
+  color: string;
+  sourceMarker: string;
+  targetMarker: string;
+}
+
 // Custom edge data
 export interface EdgeData extends Record<string, unknown> {
   sourceColumn: string;
   targetColumn: string;
-  relationshipType?: 'one-to-one' | 'one-to-many' | 'many-to-many';
+  relationshipType: RelationshipType;
 }
 
 export type FlowEdge = Edge<EdgeData>;
+
+// Relationship metadata stored separately
+export interface EdgeRelationship {
+  edgeId: string;
+  relationshipType: RelationshipType;
+}
 
 // Layout options
 export type LayoutDirection = 'TB' | 'BT' | 'LR' | 'RL';

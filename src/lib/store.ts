@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { TableState, Column, SchemaView, SupabaseApiKey } from './types';
+import { RelationshipType } from '@/types/flow';
 
 interface AppState {
   // Modal state
@@ -31,6 +32,11 @@ interface AppState {
   // Supabase API key
   supabaseApiKey: SupabaseApiKey;
   setSupabaseApiKey: (apiKey: SupabaseApiKey) => void;
+
+  // Edge relationships
+  edgeRelationships: Record<string, RelationshipType>;
+  setEdgeRelationship: (edgeId: string, type: RelationshipType) => void;
+  getEdgeRelationship: (edgeId: string) => RelationshipType;
 
   // Initialize from localStorage
   initializeFromLocalStorage: () => void;
@@ -62,6 +68,7 @@ export const useStore = create<AppState>((set, get) => ({
     anon: '',
     last_url: '',
   },
+  edgeRelationships: {},
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
@@ -204,6 +211,20 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  setEdgeRelationship: (edgeId, type) => {
+    set((state) => ({
+      edgeRelationships: {
+        ...state.edgeRelationships,
+        [edgeId]: type,
+      },
+    }));
+    get().saveToLocalStorage();
+  },
+
+  getEdgeRelationship: (edgeId) => {
+    return get().edgeRelationships[edgeId] || 'one-to-many';
+  },
+
   initializeFromLocalStorage: () => {
     if (typeof window === 'undefined') return;
 
@@ -222,6 +243,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (apiKeyData) {
         set({ supabaseApiKey: JSON.parse(apiKeyData) });
       }
+
+      const edgeRelationshipsData = localStorage.getItem('edge-relationships');
+      if (edgeRelationshipsData) {
+        set({ edgeRelationships: JSON.parse(edgeRelationshipsData) });
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
@@ -233,6 +259,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const state = get();
       localStorage.setItem('table-list', JSON.stringify(state.tables));
+      localStorage.setItem('edge-relationships', JSON.stringify(state.edgeRelationships));
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }
