@@ -20,17 +20,26 @@ function CustomEdgeComponent({
   targetPosition,
   style = {},
   markerEnd,
+  markerStart,
   data,
   selected,
 }: EdgeProps) {
   const relationshipType: RelationshipType = (data?.relationshipType as RelationshipType) || 'one-to-many';
   const relationshipInfo = getRelationshipInfo(relationshipType);
 
+  // Extend the edge slightly into the nodes for better arrow visibility
+  // The arrow marker will be slightly behind/inside the node edge
+  const offset = 8; // pixels to extend into node
+
+  // Adjust coordinates based on position to extend edge into nodes
+  const adjustedSourceX = sourcePosition === 'right' ? sourceX + offset : sourceX - offset;
+  const adjustedTargetX = targetPosition === 'left' ? targetX - offset : targetX + offset;
+
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
+    sourceX: adjustedSourceX,
     sourceY,
     sourcePosition,
-    targetX,
+    targetX: adjustedTargetX,
     targetY,
     targetPosition,
   });
@@ -41,6 +50,7 @@ function CustomEdgeComponent({
         id={id}
         path={edgePath}
         markerEnd={markerEnd}
+        markerStart={markerStart}
         style={{
           ...style,
           stroke: selected ? relationshipInfo.color : '#94a3b8',
