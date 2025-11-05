@@ -12,23 +12,28 @@ import {
   Sparkles,
   Target,
   MessageSquare,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { ModalSQL } from './ModalSQL';
 import { ModalTypes } from './ModalTypes';
 import { HelperZoom } from './HelperZoom';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import AES from 'crypto-js/aes';
 
 interface HelperProps {
   onChatOpen?: () => void;
+  isChatOpen?: boolean;
 }
 
-export function Helper({ onChatOpen }: HelperProps) {
+export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
   const { tables, schemaView, supabaseApiKey, setSchemaView, autoArrange } =
     useStore();
   const { copy, copied } = useClipboard();
   const [exportSQL, setExportSQL] = useState(false);
   const [exportTypes, setExportTypes] = useState(false);
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
 
   const focusView = () => {
     const padding = 100;
@@ -101,74 +106,95 @@ export function Helper({ onChatOpen }: HelperProps) {
 
   return (
     <>
-      <div className="fixed right-5 bottom-5 z-10 flex items-center space-x-2">
-        <Button
-          variant="outline"
-          size="icon"
-          title={copied ? 'Copied' : 'Share link'}
-          onClick={shareLink}
-          className={copied ? 'bg-primary text-primary-foreground' : ''}
-        >
-          <Share2 size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="Export Types"
-          onClick={() => setExportTypes(true)}
-        >
-          <FileType size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="Export SQL"
-          onClick={() => setExportSQL(true)}
-        >
-          <Database size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="Take a screenshot"
-          onClick={screenshot}
-        >
-          <Camera size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="Auto arrange"
-          onClick={handleAutoArrange}
-        >
-          <Sparkles size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="Focus everything center"
-          onClick={focusView}
-        >
-          <Target size={20} />
-        </Button>
-
-        {onChatOpen && (
-          <Button
-            variant="outline"
-            size="icon"
-            title="Open SQL AI Chat"
-            onClick={onChatOpen}
-          >
-            <MessageSquare size={20} />
-          </Button>
+      <div 
+        className={cn(
+          "fixed right-5 bottom-5 z-40 flex items-center space-x-2",
+          "transition-all duration-300 ease-in-out",
+          isChatOpen ? "mr-[420px]" : "mr-0"
         )}
+      >
+        {/* Toggle toolbar visibility button */}
+        <Button
+          variant="outline"
+          size="icon"
+          title={isToolbarExpanded ? "Hide toolbar" : "Show toolbar"}
+          onClick={() => setIsToolbarExpanded(!isToolbarExpanded)}
+        >
+          {isToolbarExpanded ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+        </Button>
 
-        <HelperZoom />
+        {/* All other buttons - shown only when expanded */}
+        {isToolbarExpanded && (
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              title={copied ? 'Copied' : 'Share link'}
+              onClick={shareLink}
+              className={copied ? 'bg-primary text-primary-foreground' : ''}
+            >
+              <Share2 size={20} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              title="Export Types"
+              onClick={() => setExportTypes(true)}
+            >
+              <FileType size={20} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              title="Export SQL"
+              onClick={() => setExportSQL(true)}
+            >
+              <Database size={20} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              title="Take a screenshot"
+              onClick={screenshot}
+            >
+              <Camera size={20} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              title="Auto arrange"
+              onClick={handleAutoArrange}
+            >
+              <Sparkles size={20} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              title="Focus everything center"
+              onClick={focusView}
+            >
+              <Target size={20} />
+            </Button>
+
+            {onChatOpen && (
+              <Button
+                variant="outline"
+                size="icon"
+                title="Open SQL AI Chat"
+                onClick={onChatOpen}
+              >
+                <MessageSquare size={20} />
+              </Button>
+            )}
+
+            <HelperZoom />
+          </>
+        )}
       </div>
 
       <ModalSQL open={exportSQL} onClose={() => setExportSQL(false)} />

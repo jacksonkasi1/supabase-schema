@@ -6,6 +6,7 @@ import { Table } from '@/components/Table';
 import { Helper } from '@/components/Helper';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { SelectionArea, SelectionEvent } from '@viselect/react';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   const { tables, schemaView, updateSchemaViewTranslate, updateSchemaViewScale, tableSelected, setTableSelected } = useStore();
@@ -161,43 +162,48 @@ export default function HomePage() {
   }, [isDraggingChild, schemaView]);
 
   return (
-    <div>
-      <Helper onChatOpen={() => setIsChatOpen(true)} />
-      <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
-
-      <SelectionArea
-        className="container"
-        selectables=".selectable"
-        onMove={onMove}
-        onStart={onStart}
-        onBeforeStart={onBeforeStart}
+    <div className="relative w-full h-screen overflow-hidden">
+      <div 
+        className={cn(
+          "absolute inset-0 transition-all duration-300 ease-in-out"
+        )}
       >
-        <div
-          id="screen-canvas"
-          className="w-screen h-screen relative overflow-hidden bg-white dark:bg-dark-900"
-          style={{ cursor: isDragging ? 'grabbing' : 'default' }}
-          onMouseDown={dragStart}
-          onMouseUp={() => setIsDragging(false)}
+        <Helper onChatOpen={() => setIsChatOpen(!isChatOpen)} isChatOpen={isChatOpen} />
+        <SelectionArea
+          className="container"
+          selectables=".selectable"
+          onMove={onMove}
+          onStart={onStart}
+          onBeforeStart={onBeforeStart}
         >
           <div
-            id="canvas"
-            style={{ transformOrigin, transform: transformation }}
-            className="absolute select-none relative boxes"
+            id="screen-canvas"
+            className="w-full h-screen relative overflow-hidden bg-white dark:bg-dark-900"
+            style={{ cursor: isDragging ? 'grabbing' : 'default' }}
+            onMouseDown={dragStart}
+            onMouseUp={() => setIsDragging(false)}
           >
-            <div id="canvas-children">
-              {Object.values(tables).map((table) => (
-                <Table
-                  key={table.title}
-                  table={table}
-                  scale={schemaView.scale}
-                  mounted={isMounted}
-                  onTableDragging={setIsDraggingChild}
-                />
-              ))}
+            <div
+              id="canvas"
+              style={{ transformOrigin, transform: transformation }}
+              className="absolute select-none relative boxes"
+            >
+              <div id="canvas-children">
+                {Object.values(tables).map((table) => (
+                  <Table
+                    key={table.title}
+                    table={table}
+                    scale={schemaView.scale}
+                    mounted={isMounted}
+                    onTableDragging={setIsDraggingChild}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </SelectionArea>
+        </SelectionArea>
+      </div>
+      <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
     </div>
   );
 }

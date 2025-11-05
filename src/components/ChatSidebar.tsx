@@ -34,18 +34,14 @@ interface ChatSidebarProps {
 }
 
 export function ChatSidebar({
-  isOpen: controlledIsOpen,
+  isOpen = false,
   onOpenChange,
 }: ChatSidebarProps) {
-  const { tables, supabaseApiKey } = useStore();
-  const [internalIsOpen, setInternalIsOpen] = useState(false);
-
-  // Use controlled state if provided, otherwise use internal state
-  const isOpen =
-    controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
-  const setIsOpen = onOpenChange
-    ? (value: boolean) => onOpenChange(value)
-    : setInternalIsOpen;
+  const { tables } = useStore();
+  
+  const setIsOpen = (value: boolean) => {
+    onOpenChange?.(value);
+  };
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatHistory, setChatHistory] = useLocalStorage<ChatMessage[]>(
@@ -132,7 +128,7 @@ export function ChatSidebar({
           return new Promise<string>((resolve) => {
             if (file.type.startsWith('image/')) {
               const reader = new FileReader();
-              reader.onload = (e) => {
+              reader.onload = () => {
                 resolve(`Image: ${file.name} (base64 data)`);
               };
               reader.readAsDataURL(file);
@@ -232,208 +228,203 @@ export function ChatSidebar({
   };
 
   return (
-    <>
-      {/* Sidebar */}
-      <div
-        className={cn(
-          'fixed right-0 top-0 z-[9999] h-full w-[420px] bg-background border-l shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        )}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-2">
-            <MessageSquare size={20} />
-            <h2 className="font-semibold text-lg">SQL AI Assistant</h2>
-            {chatHistory.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {chatHistory.length}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {chatHistory.length > 0 && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={clearChat}
-                      className="h-8 w-8"
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Clear Chat History</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsOpen(false)}
-              className="h-8 w-8"
-            >
-              <X size={16} />
-            </Button>
-          </div>
-        </div>
-
-        {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {chatHistory.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-              <MessageSquare size={48} className="mb-4 opacity-50" />
-              <p className="text-sm">Start a conversation to generate SQL</p>
-              {listOfTables.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-xs mb-2">Available tables:</p>
-                  <div className="flex flex-wrap gap-1 justify-center">
-                    {listOfTables.slice(0, 6).map((table) => (
-                      <Badge
-                        key={table.title}
-                        variant="outline"
-                        className="text-xs"
-                      >
-                        {table.title}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            chatHistory.map((item) => (
-              <SQLCard
-                key={item.id}
-                item={item}
-                onDelete={() => {
-                  setChatHistory((prev) =>
-                    prev.filter((msg) => msg.id !== item.id)
-                  );
-                }}
-              />
-            ))
+    <div
+      className={cn(
+        "fixed top-0 right-0 h-full w-[420px] z-50",
+        "bg-background/95 backdrop-blur-xl",
+        "border-l border-border",
+        "shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]",
+        "transform transition-transform duration-300 ease-in-out",
+        isOpen ? "translate-x-0" : "translate-x-full"
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <MessageSquare size={20} />
+          <h2 className="font-semibold text-lg">SQL AI Assistant</h2>
+          {chatHistory.length > 0 && (
+            <Badge variant="secondary" className="ml-2">
+              {chatHistory.length}
+            </Badge>
           )}
-          {isLoading && (
-            <div className="text-sm text-muted-foreground animate-pulse">
-              Generating SQL...
-            </div>
-          )}
-          <div ref={chatEndRef} />
         </div>
-
-        {/* Input Area */}
-        <div className="p-4 border-t bg-background">
-          {/* Selected Files */}
-          {selectedFiles.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {selectedFiles.map((file, index) => (
-                <Badge
-                  key={index}
-                  variant="secondary"
-                  className="flex items-center gap-1 pr-1"
-                >
-                  <span className="text-xs truncate max-w-[120px]">
-                    {file.name}
-                  </span>
+        <div className="flex items-center gap-2">
+          {chatHistory.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-4 w-4 rounded-full"
-                    onClick={() => removeFile(index)}
+                    onClick={clearChat}
+                    className="h-8 w-8"
                   >
-                    <X size={10} />
+                    <Trash2 size={16} />
                   </Button>
-                </Badge>
-              ))}
-            </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Clear Chat History</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
-
-          {/* Input Form */}
-          <TooltipProvider>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                generateSQL();
-              }}
-            >
-              <Field>
-                <FieldLabel htmlFor="chat-input" className="sr-only">
-                  Chat Input
-                </FieldLabel>
-                <InputGroup>
-                  <InputGroupTextarea
-                    id="chat-input"
-                    ref={textareaRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask, search, or make anything..."
-                    rows={3}
-                    disabled={isLoading}
-                  />
-                  <InputGroupAddon align="block-end" className="gap-1">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*,.sql,.txt"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InputGroupButton
-                          type="button"
-                          size="icon"
-                          className="rounded-full h-8 w-8"
-                          aria-label="Attach file"
-                          onClick={handleFileButtonClick}
-                          disabled={isLoading}
-                        >
-                          <Paperclip size={16} />
-                        </InputGroupButton>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Attach file or image</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InputGroupButton
-                          type="submit"
-                          aria-label="Send"
-                          className="rounded-full h-8 w-8"
-                          variant="default"
-                          size="icon"
-                          disabled={isLoading || !query.trim()}
-                        >
-                          <ArrowUp size={16} />
-                        </InputGroupButton>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Send message</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </InputGroupAddon>
-                </InputGroup>
-              </Field>
-            </form>
-          </TooltipProvider>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setIsOpen(false);
+            }}
+            className="h-8 w-8"
+          >
+            <X size={16} />
+          </Button>
         </div>
       </div>
 
-      {/* Overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[9998] bg-black/20 backdrop-blur-sm"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-    </>
+      {/* Content */}
+      <div className="overflow-y-auto p-4 space-y-4 h-[calc(100vh-8rem)]">
+        {chatHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+            <MessageSquare size={48} className="mb-4 opacity-50" />
+            <p className="text-sm">Start a conversation to generate SQL</p>
+            {listOfTables.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs mb-2">Available tables:</p>
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {listOfTables.slice(0, 6).map((table) => (
+                    <Badge
+                      key={table.title}
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      {table.title}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          chatHistory.map((item) => (
+            <SQLCard
+              key={item.id}
+              item={item}
+              onDelete={() => {
+                setChatHistory((prev) =>
+                  prev.filter((msg) => msg.id !== item.id)
+                );
+              }}
+            />
+          ))
+        )}
+        {isLoading && (
+          <div className="text-sm text-muted-foreground animate-pulse">
+            Generating SQL...
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Footer */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50">
+        {/* Selected Files */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {selectedFiles.map((file, index) => (
+              <Badge
+                key={index}
+                variant="secondary"
+                className="flex items-center gap-1 pr-1"
+              >
+                <span className="text-xs truncate max-w-[120px]">
+                  {file.name}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-4 w-4 rounded-full"
+                  onClick={() => removeFile(index)}
+                >
+                  <X size={10} />
+                </Button>
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {/* Input Form */}
+        <TooltipProvider>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              generateSQL();
+            }}
+          >
+            <Field>
+              <FieldLabel htmlFor="chat-input" className="sr-only">
+                Chat Input
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupTextarea
+                  id="chat-input"
+                  ref={textareaRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask, search, or make anything..."
+                  rows={3}
+                  disabled={isLoading}
+                />
+                <InputGroupAddon align="block-end" className="gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.sql,.txt"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <InputGroupButton
+                        type="button"
+                        size="icon"
+                        className="rounded-full h-8 w-8"
+                        aria-label="Attach file"
+                        onClick={handleFileButtonClick}
+                        disabled={isLoading}
+                      >
+                        <Paperclip size={16} />
+                      </InputGroupButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Attach file or image</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <InputGroupButton
+                        type="submit"
+                        aria-label="Send"
+                        className="rounded-full h-8 w-8"
+                        variant="default"
+                        size="icon"
+                        disabled={isLoading || !query.trim()}
+                      >
+                        <ArrowUp size={16} />
+                      </InputGroupButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Send message</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </InputGroupAddon>
+              </InputGroup>
+            </Field>
+          </form>
+        </TooltipProvider>
+      </div>
+    </div>
   );
 }
