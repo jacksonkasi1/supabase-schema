@@ -50,7 +50,6 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
                     top: '50%',
                     transform: 'translateY(-50%)',
                   }}
-                  title={`🔗 Foreign Key: ${col.title}\nReferences → ${col.fk}\nDrag to create connection`}
                 />
               )}
 
@@ -67,9 +66,6 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
                   top: '50%',
                   transform: 'translateY(-50%)',
                 }}
-                title={col.pk
-                  ? `🔑 Primary Key: ${col.title}\nCan receive foreign key connections`
-                  : `📝 Column: ${col.title}\nCan receive connections`}
               />
 
               <div
