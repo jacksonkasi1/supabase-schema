@@ -15,7 +15,6 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
-import { cn } from '@/lib/utils';
 import { TableNode } from './TableNode';
 import { ViewNode } from './ViewNode';
 import { CustomEdge } from './CustomEdge';
@@ -48,7 +47,7 @@ function FlowCanvasInner() {
     edgeId?: string;
     isView?: boolean;
   } | null>(null);
-  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>('strict');
+  const connectionMode = 'strict'; // Always use strict mode for now
   const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
@@ -490,28 +489,6 @@ function FlowCanvasInner() {
           nodeClassName="!fill-warm-gray-300 dark:!fill-dark-700"
         />
       </ReactFlow>
-
-      {/* Connection Mode Toggle */}
-      <div className="absolute top-4 right-20 z-10">
-        <button
-          onClick={() => setConnectionMode((mode) => (mode === 'strict' ? 'flexible' : 'strict'))}
-          className={cn(
-            'px-3 py-2 rounded-md text-sm font-medium shadow-md transition-all',
-            'flex items-center gap-2',
-            connectionMode === 'strict'
-              ? 'bg-blue-500 text-white hover:bg-blue-600'
-              : 'bg-green-500 text-white hover:bg-green-600'
-          )}
-          title={
-            connectionMode === 'strict'
-              ? 'Strict Mode: Only FK columns can start connections'
-              : 'Flexible Mode: Any column can start connections'
-          }
-        >
-          <span>{connectionMode === 'strict' ? '🔒' : '🔓'}</span>
-          <span>{connectionMode === 'strict' ? 'Strict' : 'Flexible'}</span>
-        </button>
-      </div>
 
       {/* Relationship Selector */}
       {selectedEdge && (
