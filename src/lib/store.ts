@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { TableState, Column, SchemaView, SupabaseApiKey } from './types';
+import { RelationshipType } from '@/types/flow';
 
 interface AppState {
   // Modal state
@@ -13,6 +14,16 @@ interface AppState {
   setTables: (definition: any, paths: any) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
   autoArrange: () => void;
+
+  // Layout trigger for ReactFlow
+  layoutTrigger: number;
+  triggerLayout: () => void;
+  fitViewTrigger: number;
+  triggerFitView: () => void;
+  zoomInTrigger: number;
+  triggerZoomIn: () => void;
+  zoomOutTrigger: number;
+  triggerZoomOut: () => void;
 
   // Selection and highlighting
   tableSelected: Set<Element>;
@@ -31,6 +42,11 @@ interface AppState {
   // Supabase API key
   supabaseApiKey: SupabaseApiKey;
   setSupabaseApiKey: (apiKey: SupabaseApiKey) => void;
+
+  // Edge relationships
+  edgeRelationships: Record<string, RelationshipType>;
+  setEdgeRelationship: (edgeId: string, type: RelationshipType) => void;
+  getEdgeRelationship: (edgeId: string) => RelationshipType;
 
   // Initialize from localStorage
   initializeFromLocalStorage: () => void;
@@ -62,6 +78,11 @@ export const useStore = create<AppState>((set, get) => ({
     anon: '',
     last_url: '',
   },
+  edgeRelationships: {},
+  layoutTrigger: 0,
+  fitViewTrigger: 0,
+  zoomInTrigger: 0,
+  zoomOutTrigger: 0,
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
@@ -117,57 +138,24 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   autoArrange: () => {
-    const gap = 250;
-    const column = 3;
-    const minWidth: number[] = [];
-    const minHeight: number[] = [];
-    const nodeList: NodeListOf<HTMLElement> = document.querySelectorAll(
-      '#canvas-children > div'
-    );
+    // Trigger layout in ReactFlow
+    set((state) => ({ layoutTrigger: state.layoutTrigger + 1 }));
+  },
 
-    nodeList.forEach((el, index) => {
-      if (minWidth[index % column]) {
-        if (!(minWidth[index % column] < el.offsetWidth)) {
-          minWidth[index % column] = minWidth[index % column];
-        }
-      } else {
-        minWidth[index % column] = el.offsetWidth;
-      }
+  triggerLayout: () => {
+    set((state) => ({ layoutTrigger: state.layoutTrigger + 1 }));
+  },
 
-      if (minHeight[Math.floor(index / column)]) {
-        if (!(minHeight[Math.floor(index / column)] < el.offsetHeight)) {
-          minHeight[Math.floor(index / column)] = minHeight[Math.floor(index / column)];
-        }
-      } else {
-        minHeight[Math.floor(index / column)] = el.offsetHeight;
-      }
-    });
+  triggerFitView: () => {
+    set((state) => ({ fitViewTrigger: state.fitViewTrigger + 1 }));
+  },
 
-    minWidth.unshift(0);
-    minHeight.unshift(0);
+  triggerZoomIn: () => {
+    set((state) => ({ zoomInTrigger: state.zoomInTrigger + 1 }));
+  },
 
-    const setLeft = minWidth.map((_, index) =>
-      minWidth.slice(0, index + 1).reduce((a, b) => a + b + gap)
-    );
-    const setTop = minHeight.map((_, index) =>
-      minHeight.slice(0, index + 1).reduce((a, b) => a + b + gap)
-    );
-
-    const newTables = { ...get().tables };
-    nodeList.forEach((el, index) => {
-      if (newTables[el.id]) {
-        newTables[el.id] = {
-          ...newTables[el.id],
-          position: {
-            x: setLeft[index % column],
-            y: setTop[Math.floor(index / column)],
-          },
-        };
-      }
-    });
-
-    set({ tables: newTables });
-    get().saveToLocalStorage();
+  triggerZoomOut: () => {
+    set((state) => ({ zoomOutTrigger: state.zoomOutTrigger + 1 }));
   },
 
   setTableSelected: (selected) => set({ tableSelected: selected }),
@@ -204,6 +192,20 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  setEdgeRelationship: (edgeId, type) => {
+    set((state) => ({
+      edgeRelationships: {
+        ...state.edgeRelationships,
+        [edgeId]: type,
+      },
+    }));
+    get().saveToLocalStorage();
+  },
+
+  getEdgeRelationship: (edgeId) => {
+    return get().edgeRelationships[edgeId] || 'one-to-many';
+  },
+
   initializeFromLocalStorage: () => {
     if (typeof window === 'undefined') return;
 
@@ -222,6 +224,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (apiKeyData) {
         set({ supabaseApiKey: JSON.parse(apiKeyData) });
       }
+
+      const edgeRelationshipsData = localStorage.getItem('edge-relationships');
+      if (edgeRelationshipsData) {
+        set({ edgeRelationships: JSON.parse(edgeRelationshipsData) });
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
@@ -233,6 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const state = get();
       localStorage.setItem('table-list', JSON.stringify(state.tables));
+      localStorage.setItem('edge-relationships', JSON.stringify(state.edgeRelationships));
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }

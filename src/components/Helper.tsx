@@ -28,55 +28,35 @@ interface HelperProps {
 }
 
 export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
-  const { tables, schemaView, supabaseApiKey, setSchemaView, autoArrange } =
+  const { tables, schemaView, supabaseApiKey, triggerLayout, triggerFitView } =
     useStore();
   const { copy, copied } = useClipboard();
   const [exportSQL, setExportSQL] = useState(false);
   const [exportTypes, setExportTypes] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
 
-  const focusView = () => {
-    const padding = 100;
-    const assumeWidthHeight = 300;
-    const allX = Object.values(tables).map((a) => a.position?.x || 0);
-    const minX = Math.min(...allX);
-    const maxX = Math.max(...allX) + assumeWidthHeight;
-    const allY = Object.values(tables).map((a) => a.position?.y || 0);
-    const minY = Math.min(...allY);
-    const maxY = Math.max(...allY) + assumeWidthHeight;
-
-    const diffX = maxX - minX + padding * 2;
-    const diffY = maxY - minY + padding * 2;
-    const scaleX = window.innerWidth / diffX;
-    const scaleY = window.innerHeight / diffY;
-
-    const bestScale = Math.min(scaleX, scaleY);
-
-    const centeringX = (window.innerWidth - diffX * bestScale) * bestScale;
-    const centeringY = (window.innerHeight - diffY * bestScale) * bestScale;
-
-    const translateX = (-1 * minX + centeringX + padding) * bestScale;
-    const translateY = (-1 * minY + centeringY + padding) * bestScale;
-
-    setSchemaView({
-      scale: bestScale,
-      translate: { x: translateX, y: translateY },
-    });
+  const handleAutoArrange = () => {
+    triggerLayout();
   };
 
-  const handleAutoArrange = () => {
-    autoArrange();
-    setTimeout(() => {
-      focusView();
-    }, 0);
+  const handleFitView = () => {
+    triggerFitView();
   };
 
   const screenshot = () => {
-    const el = document.getElementById('screen-canvas') as HTMLElement;
+    // Target the ReactFlow container
+    const el = document.querySelector('.react-flow') as HTMLElement;
+
+    if (!el) {
+      console.error('ReactFlow container not found');
+      return;
+    }
+
     toPng(el, {
       skipFonts: true,
       cacheBust: true,
       pixelRatio: 2,
+      backgroundColor: '#ffffff',
     })
       .then((dataUrl) => {
         const link = document.createElement('a');
@@ -175,8 +155,8 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
             <Button
               variant="outline"
               size="icon"
-              title="Focus everything center"
-              onClick={focusView}
+              title="Fit view"
+              onClick={handleFitView}
             >
               <Target size={20} />
             </Button>

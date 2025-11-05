@@ -4,8 +4,8 @@ import { calculateNodeDimensions } from './flow-utils';
 
 const DEFAULT_OPTIONS: LayoutOptions = {
   direction: 'TB',
-  nodeSpacing: 50,
-  rankSpacing: 100,
+  nodeSpacing: 200,  // Increased from 50 to 200 for more horizontal spacing
+  rankSpacing: 250,  // Increased from 100 to 250 for more vertical spacing
 };
 
 /**

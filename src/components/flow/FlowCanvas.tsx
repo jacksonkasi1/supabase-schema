@@ -4,59 +4,115 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
   Connection,
-  Panel,
-  useReactFlow,
   ReactFlowProvider,
+  Edge,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
 import { TableNode } from './TableNode';
+import { CustomEdge } from './CustomEdge';
+import { RelationshipSelector } from './RelationshipSelector';
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
 import { getLayoutedNodes } from '@/lib/layout';
-import { LayoutDirection } from '@/types/flow';
-import { Button } from '@/components/ui/button';
-import { LayoutGrid } from 'lucide-react';
+import { RelationshipType } from '@/types/flow';
 
 const nodeTypes = {
   table: TableNode,
   view: TableNode,
 };
 
+const edgeTypes = {
+  custom: CustomEdge,
+};
+
 function FlowCanvasInner() {
-  const { tables, updateTablePosition } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
-  const [_layoutDirection, setLayoutDirection] = useState<LayoutDirection>('TB');
-  const { fitView } = useReactFlow();
+  const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
+  const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
     const flowNodes = tablesToNodes(tables);
-    const flowEdges = tablesToEdges(tables);
+    const flowEdges = tablesToEdges(tables).map((edge) => ({
+      ...edge,
+      type: 'custom',
+      data: {
+        ...edge.data,
+        relationshipType: getEdgeRelationship(edge.id),
+      },
+    }));
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [tables, setNodes, setEdges]);
+  }, [tables, setNodes, setEdges, getEdgeRelationship]);
 
-  // Auto-layout function
-  const onLayout = useCallback(
-    (direction: LayoutDirection) => {
-      const layoutedNodes = getLayoutedNodes(nodes, edges, { direction });
+  // Listen for layout trigger from store
+  useEffect(() => {
+    if (layoutTrigger > 0 && nodes.length > 0 && edges.length > 0) {
+      const layoutedNodes = getLayoutedNodes(nodes, edges, { direction: 'TB' });
       setNodes(layoutedNodes);
-      setLayoutDirection(direction);
+
+      // Update positions in store
+      layoutedNodes.forEach((node) => {
+        updateTablePosition(node.id, node.position.x, node.position.y);
+      });
 
       // Fit view after layout
-      window.requestAnimationFrame(() => {
+      setTimeout(() => {
         fitView({ padding: 0.2, duration: 400 });
-      });
-    },
-    [nodes, edges, setNodes, fitView]
-  );
+      }, 50);
+    }
+  }, [layoutTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for fit view trigger from store
+  useEffect(() => {
+    if (fitViewTrigger > 0) {
+      fitView({ padding: 0.2, duration: 400 });
+    }
+  }, [fitViewTrigger, fitView]);
+
+  // Listen for zoom in trigger
+  useEffect(() => {
+    if (zoomInTrigger > 0) {
+      zoomIn({ duration: 200 });
+      // Dispatch custom event for zoom level display
+      setTimeout(() => {
+        const zoom = getZoom();
+        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+      }, 250);
+    }
+  }, [zoomInTrigger, zoomIn, getZoom]);
+
+  // Listen for zoom out trigger
+  useEffect(() => {
+    if (zoomOutTrigger > 0) {
+      zoomOut({ duration: 200 });
+      // Dispatch custom event for zoom level display
+      setTimeout(() => {
+        const zoom = getZoom();
+        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+      }, 250);
+    }
+  }, [zoomOutTrigger, zoomOut, getZoom]);
+
+  // Emit initial zoom level and listen for zoom changes
+  useEffect(() => {
+    const zoom = getZoom();
+    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+  }, [getZoom]);
+
+  // Handle ReactFlow zoom changes to update display
+  const onMove = useCallback(() => {
+    const zoom = getZoom();
+    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+  }, [getZoom]);
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
@@ -99,19 +155,66 @@ function FlowCanvasInner() {
 
   const onPaneClick = useCallback(() => {
     setHighlightedEdges(new Set());
+    setSelectedEdge(null);
   }, []);
+
+  // Handle edge click to show relationship selector
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      const relationshipType = getEdgeRelationship(edge.id);
+      setSelectedEdge({
+        id: edge.id,
+        type: relationshipType,
+        position: {
+          x: event.clientX,
+          y: event.clientY,
+        },
+      });
+    },
+    [getEdgeRelationship]
+  );
+
+  // Handle relationship type change
+  const handleRelationshipChange = useCallback(
+    (type: RelationshipType) => {
+      if (selectedEdge) {
+        setEdgeRelationship(selectedEdge.id, type);
+        // Update the edge data immediately
+        setEdges((eds) =>
+          eds.map((edge) =>
+            edge.id === selectedEdge.id
+              ? {
+                  ...edge,
+                  data: {
+                    ...edge.data,
+                    relationshipType: type,
+                  },
+                }
+              : edge
+          )
+        );
+      }
+    },
+    [selectedEdge, setEdgeRelationship, setEdges]
+  );
+
+  // Handle edge deletion
+  const handleEdgeDelete = useCallback(() => {
+    if (selectedEdge) {
+      setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id));
+      setSelectedEdge(null);
+    }
+  }, [selectedEdge, setEdges]);
 
   // Apply highlighting to edges
   const edgesWithHighlight = useMemo(() => {
     return edges.map((edge) => ({
       ...edge,
       animated: highlightedEdges.has(edge.id),
-      style: {
-        stroke: highlightedEdges.has(edge.id) ? '#10b981' : '#94a3b8',
-        strokeWidth: highlightedEdges.has(edge.id) ? 2 : 1,
-      },
+      selected: selectedEdge?.id === edge.id,
     }));
-  }, [edges, highlightedEdges]);
+  }, [edges, highlightedEdges, selectedEdge]);
 
   return (
     <div className="w-full h-screen">
@@ -124,55 +227,37 @@ function FlowCanvasInner() {
         onNodesDelete={onNodesDelete}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onMove={onMove}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}
         defaultEdgeOptions={{
-          type: 'smoothstep',
+          type: 'custom',
           animated: false,
-          style: { stroke: '#94a3b8', strokeWidth: 1 },
         }}
         className="bg-white dark:bg-dark-900"
       >
         <Background className="dark:opacity-20" />
-        <Controls className="!bg-white dark:!bg-dark-800 !border-warm-gray-300 dark:!border-dark-border" />
         <MiniMap
           className="!bg-warm-gray-100 dark:!bg-dark-800 !border-warm-gray-300 dark:!border-dark-border"
           nodeClassName="!fill-warm-gray-300 dark:!fill-dark-700"
         />
-
-        {/* Layout Controls */}
-        <Panel position="top-left" className="space-x-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onLayout('TB')}
-            className="bg-white dark:bg-dark-800"
-          >
-            <LayoutGrid className="w-4 h-4 mr-2" />
-            Layout TB
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onLayout('LR')}
-            className="bg-white dark:bg-dark-800"
-          >
-            <LayoutGrid className="w-4 h-4 mr-2" />
-            Layout LR
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fitView({ padding: 0.2, duration: 400 })}
-            className="bg-white dark:bg-dark-800"
-          >
-            Fit View
-          </Button>
-        </Panel>
       </ReactFlow>
+
+      {/* Relationship Selector */}
+      {selectedEdge && (
+        <RelationshipSelector
+          currentType={selectedEdge.type}
+          onSelect={handleRelationshipChange}
+          position={selectedEdge.position}
+          onClose={() => setSelectedEdge(null)}
+          onDelete={handleEdgeDelete}
+        />
+      )}
     </div>
   );
 }
