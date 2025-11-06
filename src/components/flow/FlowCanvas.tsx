@@ -165,6 +165,12 @@ function FlowCanvasInner() {
           duration: 600,
           maxZoom: 1.2,
         });
+
+        // Clear focusTableId after animation completes to prevent re-triggering
+        // This ensures the focus only happens once per search action
+        setTimeout(() => {
+          useStore.setState({ focusTableId: null });
+        }, 650); // Slightly longer than animation duration
       }
     }
   }, [focusTableTrigger, focusTableId, nodes, fitView]);
