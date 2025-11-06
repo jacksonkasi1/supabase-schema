@@ -114,3 +114,67 @@ export function centerNodes(
     },
   }));
 }
+
+/**
+ * Apply layout with schema grouping
+ * Groups nodes by schema and lays out each group separately
+ */
+export function getLayoutedNodesWithSchemas(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  options: Partial<LayoutOptions> = {}
+): FlowNode[] {
+  const layoutOptions = { ...DEFAULT_OPTIONS, ...options };
+
+  // Group nodes by schema
+  const schemaGroups: Record<string, FlowNode[]> = {};
+  nodes.forEach((node) => {
+    const schema = (node.data as any).schema || 'public';
+    if (!schemaGroups[schema]) {
+      schemaGroups[schema] = [];
+    }
+    schemaGroups[schema].push(node);
+  });
+
+  // Layout each schema group separately
+  const layoutedGroups: Record<string, FlowNode[]> = {};
+  const groupBounds: Record<string, { width: number; height: number }> = {};
+
+  Object.entries(schemaGroups).forEach(([schema, schemaNodes]) => {
+    // Filter edges to only include edges within this schema
+    const schemaNodeIds = new Set(schemaNodes.map((n) => n.id));
+    const schemaEdges = edges.filter(
+      (edge) => schemaNodeIds.has(edge.source) && schemaNodeIds.has(edge.target)
+    );
+
+    // Layout this schema group
+    const layouted = getLayoutedNodes(schemaNodes, schemaEdges, layoutOptions);
+    layoutedGroups[schema] = layouted;
+
+    // Calculate bounds for this group
+    const bounds = getNodesBounds(layouted);
+    groupBounds[schema] = { width: bounds.width, height: bounds.height };
+  });
+
+  // Position schema groups horizontally with spacing
+  const schemaSpacing = 400; // Horizontal spacing between schema groups
+  let currentX = 0;
+
+  const finalLayoutedNodes: FlowNode[] = [];
+
+  Object.entries(layoutedGroups).forEach(([schema, schemaNodes]) => {
+    // Offset all nodes in this group
+    const offsetNodes = schemaNodes.map((node) => ({
+      ...node,
+      position: {
+        x: node.position.x + currentX,
+        y: node.position.y,
+      },
+    }));
+
+    finalLayoutedNodes.push(...offsetNodes);
+    currentX += groupBounds[schema].width + schemaSpacing;
+  });
+
+  return finalLayoutedNodes;
+}

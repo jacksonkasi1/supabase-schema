@@ -17,6 +17,7 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
         title: table.title,
         columns: table.columns || [],
         is_view: table.is_view,
+        schema: table.schema || 'public', // Include schema in node data
       },
     };
   });

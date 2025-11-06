@@ -21,7 +21,7 @@ import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
 import { ContextMenu, createNodeContextMenu, createEdgeContextMenu } from './ContextMenu';
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
-import { getLayoutedNodes } from '@/lib/layout';
+import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
@@ -117,7 +117,8 @@ function FlowCanvasInner() {
   // Listen for layout trigger from store
   useEffect(() => {
     if (layoutTrigger > 0 && nodes.length > 0 && edges.length > 0) {
-      const layoutedNodes = getLayoutedNodes(nodes, edges, { direction: 'TB' });
+      // Use schema-aware layout to group tables by schema
+      const layoutedNodes = getLayoutedNodesWithSchemas(nodes, edges, { direction: 'TB' });
       setNodes(layoutedNodes);
 
       // Update positions in store
