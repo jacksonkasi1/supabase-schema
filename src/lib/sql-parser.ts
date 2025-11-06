@@ -62,11 +62,11 @@ export function parseSQLSchema(sql: string): TableState {
   for (const statement of statements) {
     const trimmed = statement.trim();
 
-    // Match ALTER TABLE statements
-    const alterTableMatch = trimmed.match(/alter\s+table\s+["']?(\w+)["']?/i);
+    // Match ALTER TABLE statements (handle schema prefixes like public.users or just users)
+    const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
 
     if (alterTableMatch) {
-      const tableName = alterTableMatch[1];
+      const tableName = alterTableMatch[2]; // Use the table name, ignore schema prefix
 
       // Parse foreign keys
       parseForeignKeysFromAlter(tables, tableName, trimmed);
