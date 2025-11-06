@@ -175,3 +175,74 @@ export function getConnectedEdges(
     (edge) => edge.source === nodeId || edge.target === nodeId
   );
 }
+
+/**
+ * Group tables by schema
+ */
+export function groupTablesBySchema(tables: TableState): Record<string, string[]> {
+  const groups: Record<string, string[]> = {};
+
+  Object.values(tables).forEach((table) => {
+    const schema = table.schema || 'public'; // Default to 'public'
+    if (!groups[schema]) {
+      groups[schema] = [];
+    }
+    groups[schema].push(table.title);
+  });
+
+  return groups;
+}
+
+/**
+ * Get all unique schemas from tables
+ */
+export function getAllSchemas(tables: TableState): string[] {
+  const schemas = new Set<string>();
+
+  Object.values(tables).forEach((table) => {
+    schemas.add(table.schema || 'public');
+  });
+
+  return Array.from(schemas).sort();
+}
+
+/**
+ * Calculate bounding box for a group of nodes
+ */
+export function calculateSchemaBoundingBox(
+  schemaName: string,
+  tables: TableState,
+  padding: number = 40
+): { x: number; y: number; width: number; height: number } | null {
+  // Get all tables in this schema
+  const schemaTables = Object.values(tables).filter(
+    (table) => (table.schema || 'public') === schemaName
+  );
+
+  if (schemaTables.length === 0) {
+    return null;
+  }
+
+  // Find min/max coordinates
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  schemaTables.forEach((table) => {
+    const pos = table.position || { x: 0, y: 0 };
+    const dimensions = calculateNodeDimensions(table);
+
+    minX = Math.min(minX, pos.x);
+    minY = Math.min(minY, pos.y);
+    maxX = Math.max(maxX, pos.x + dimensions.width);
+    maxY = Math.max(maxY, pos.y + dimensions.height);
+  });
+
+  return {
+    x: minX - padding,
+    y: minY - padding,
+    width: maxX - minX + (padding * 2),
+    height: maxY - minY + (padding * 2),
+  };
+}

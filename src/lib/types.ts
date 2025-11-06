@@ -23,6 +23,7 @@ export interface Table {
   columns?: Column[];
   position?: Position;
   is_view?: boolean;
+  schema?: string; // Schema name (e.g., 'public', 'auth', 'storage')
 }
 
 export interface TableState {

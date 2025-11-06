@@ -53,6 +53,15 @@ interface AppState {
   setEdgeRelationship: (edgeId: string, type: RelationshipType) => void;
   getEdgeRelationship: (edgeId: string) => RelationshipType;
 
+  // Schema grouping
+  visibleSchemas: Set<string>;
+  collapsedSchemas: Set<string>;
+  toggleSchemaVisibility: (schema: string) => void;
+  toggleSchemaCollapse: (schema: string) => void;
+  showAllSchemas: () => void;
+  hideAllSchemas: () => void;
+  getVisibleSchemas: () => string[];
+
   // Initialize from localStorage
   initializeFromLocalStorage: () => void;
 
@@ -84,6 +93,8 @@ export const useStore = create<AppState>((set, get) => ({
     last_url: '',
   },
   edgeRelationships: {},
+  visibleSchemas: new Set<string>(),
+  collapsedSchemas: new Set<string>(),
   layoutTrigger: 0,
   fitViewTrigger: 0,
   zoomInTrigger: 0,
@@ -222,6 +233,54 @@ export const useStore = create<AppState>((set, get) => ({
     return get().edgeRelationships[edgeId] || 'one-to-many';
   },
 
+  // Schema grouping actions
+  toggleSchemaVisibility: (schema) => {
+    set((state) => {
+      const newVisibleSchemas = new Set(state.visibleSchemas);
+      if (newVisibleSchemas.has(schema)) {
+        newVisibleSchemas.delete(schema);
+      } else {
+        newVisibleSchemas.add(schema);
+      }
+      return { visibleSchemas: newVisibleSchemas };
+    });
+    get().saveToLocalStorage();
+  },
+
+  toggleSchemaCollapse: (schema) => {
+    set((state) => {
+      const newCollapsedSchemas = new Set(state.collapsedSchemas);
+      if (newCollapsedSchemas.has(schema)) {
+        newCollapsedSchemas.delete(schema);
+      } else {
+        newCollapsedSchemas.add(schema);
+      }
+      return { collapsedSchemas: newCollapsedSchemas };
+    });
+    get().saveToLocalStorage();
+  },
+
+  showAllSchemas: () => {
+    const { tables } = get();
+    const allSchemas = new Set<string>();
+    Object.values(tables).forEach((table) => {
+      if (table.schema) {
+        allSchemas.add(table.schema);
+      }
+    });
+    set({ visibleSchemas: allSchemas });
+    get().saveToLocalStorage();
+  },
+
+  hideAllSchemas: () => {
+    set({ visibleSchemas: new Set<string>() });
+    get().saveToLocalStorage();
+  },
+
+  getVisibleSchemas: () => {
+    return Array.from(get().visibleSchemas);
+  },
+
   initializeFromLocalStorage: () => {
     if (typeof window === 'undefined') return;
 
@@ -245,6 +304,19 @@ export const useStore = create<AppState>((set, get) => ({
       if (edgeRelationshipsData) {
         set({ edgeRelationships: JSON.parse(edgeRelationshipsData) });
       }
+
+      const visibleSchemasData = localStorage.getItem('visible-schemas');
+      if (visibleSchemasData) {
+        set({ visibleSchemas: new Set(JSON.parse(visibleSchemasData)) });
+      } else {
+        // Default: show all schemas
+        get().showAllSchemas();
+      }
+
+      const collapsedSchemasData = localStorage.getItem('collapsed-schemas');
+      if (collapsedSchemasData) {
+        set({ collapsedSchemas: new Set(JSON.parse(collapsedSchemasData)) });
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
@@ -257,6 +329,8 @@ export const useStore = create<AppState>((set, get) => ({
       const state = get();
       localStorage.setItem('table-list', JSON.stringify(state.tables));
       localStorage.setItem('edge-relationships', JSON.stringify(state.edgeRelationships));
+      localStorage.setItem('visible-schemas', JSON.stringify(Array.from(state.visibleSchemas)));
+      localStorage.setItem('collapsed-schemas', JSON.stringify(Array.from(state.collapsedSchemas)));
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }

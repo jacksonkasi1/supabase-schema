@@ -24,7 +24,8 @@ export function parseSQLSchema(sql: string): TableState {
     );
 
     if (createTableMatch) {
-      // Use table name (with or without schema prefix)
+      // Extract schema and table name
+      const schemaName = createTableMatch[1] || 'public'; // Default to 'public' if no schema specified
       const tableName = createTableMatch[2]; // Always use the actual table name, not schema
       const columns = parseColumns(statement);
 
@@ -32,7 +33,8 @@ export function parseSQLSchema(sql: string): TableState {
         title: tableName,
         is_view: false,
         columns: columns,
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        schema: schemaName
       };
     }
 
@@ -43,13 +45,15 @@ export function parseSQLSchema(sql: string): TableState {
     );
 
     if (createViewMatch) {
+      const schemaName = createViewMatch[1] || 'public'; // Default to 'public' if no schema specified
       const viewName = createViewMatch[2]; // Use actual view name, not schema
 
       tables[viewName] = {
         title: viewName,
         is_view: true,
         columns: [],
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        schema: schemaName
       };
     }
   }
