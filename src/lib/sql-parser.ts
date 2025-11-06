@@ -12,6 +12,9 @@ export function parseSQLSchema(sql: string): TableState {
     // Parse SQL to AST
     const ast = parser.astify(sql, { database: 'PostgreSQL' });
 
+    // Debug: log first statement to understand structure
+    console.log('AST sample (first statement):', JSON.stringify(Array.isArray(ast) ? ast[0] : ast, null, 2));
+
     // Ensure ast is an array
     const statements = Array.isArray(ast) ? ast : [ast];
 
@@ -149,11 +152,34 @@ function extractViewInfo(statement: any): { name: string; schema: string } | nul
  */
 function parseColumnFromAST(columnDef: any): Column | null {
   try {
-    const columnName = columnDef.column?.column;
-    if (!columnName) return null;
+    // Debug: log the structure to understand what we're getting
+    console.log('Column def:', JSON.stringify(columnDef, null, 2));
 
-    // Extract data type
-    const dataType = columnDef.definition?.dataType || 'text';
+    // Extract column name - handle different formats
+    let columnName: string;
+    if (typeof columnDef.column === 'string') {
+      columnName = columnDef.column;
+    } else if (columnDef.column?.column) {
+      columnName = typeof columnDef.column.column === 'string'
+        ? columnDef.column.column
+        : String(columnDef.column.column);
+    } else {
+      console.error('Could not extract column name from:', columnDef);
+      return null;
+    }
+
+    // Extract data type - handle different formats
+    let dataType: string = 'text';
+    if (columnDef.definition?.dataType) {
+      dataType = typeof columnDef.definition.dataType === 'string'
+        ? columnDef.definition.dataType
+        : String(columnDef.definition.dataType);
+    } else if (columnDef.dataType) {
+      dataType = typeof columnDef.dataType === 'string'
+        ? columnDef.dataType
+        : String(columnDef.dataType);
+    }
+
     const format = mapPostgreSQLType(dataType);
 
     // Check constraints
@@ -161,11 +187,6 @@ function parseColumnFromAST(columnDef: any): Column | null {
     let isNotNull = false;
     let foreignKey: string | undefined;
     let defaultValue: any;
-
-    // Check column constraints
-    if (columnDef.definition?.length) {
-      // Handle data type with length/precision
-    }
 
     // Check nullable
     if (columnDef.nullable !== undefined) {
@@ -186,6 +207,8 @@ function parseColumnFromAST(columnDef: any): Column | null {
       }
     }
 
+    console.log('Parsed column:', { columnName, format, dataType });
+
     return {
       title: columnName,
       format: format,
@@ -196,7 +219,7 @@ function parseColumnFromAST(columnDef: any): Column | null {
       fk: foreignKey
     };
   } catch (error) {
-    console.error('Error parsing column:', error);
+    console.error('Error parsing column:', error, 'Column def was:', columnDef);
     return null;
   }
 }
