@@ -12,9 +12,6 @@ export function parseSQLSchema(sql: string): TableState {
     // Parse SQL to AST
     const ast = parser.astify(sql, { database: 'PostgreSQL' });
 
-    // Debug: log first statement to understand structure
-    console.log('AST sample (first statement):', JSON.stringify(Array.isArray(ast) ? ast[0] : ast, null, 2));
-
     // Ensure ast is an array
     const statements = Array.isArray(ast) ? ast : [ast];
 
@@ -152,53 +149,54 @@ function extractViewInfo(statement: any): { name: string; schema: string } | nul
  */
 function parseColumnFromAST(columnDef: any): Column | null {
   try {
-    // Debug: log the structure to understand what we're getting
-    console.log('Column def:', JSON.stringify(columnDef, null, 2));
+    // Extract column name - handle deeply nested structure
+    let columnName: string | undefined;
 
-    // Extract column name - handle different formats
-    let columnName: string;
-    if (typeof columnDef.column === 'string') {
-      columnName = columnDef.column;
+    // Try different paths based on AST structure
+    if (columnDef.column?.column?.expr?.value) {
+      // Most common: columnDef.column.column.expr.value
+      columnName = String(columnDef.column.column.expr.value);
     } else if (columnDef.column?.column) {
       columnName = typeof columnDef.column.column === 'string'
         ? columnDef.column.column
         : String(columnDef.column.column);
-    } else {
+    } else if (typeof columnDef.column === 'string') {
+      columnName = columnDef.column;
+    }
+
+    if (!columnName) {
       console.error('Could not extract column name from:', columnDef);
       return null;
     }
 
-    // Extract data type - handle different formats
+    // Extract data type
     let dataType: string = 'text';
     if (columnDef.definition?.dataType) {
-      dataType = typeof columnDef.definition.dataType === 'string'
-        ? columnDef.definition.dataType
-        : String(columnDef.definition.dataType);
-    } else if (columnDef.dataType) {
-      dataType = typeof columnDef.dataType === 'string'
-        ? columnDef.dataType
-        : String(columnDef.dataType);
+      dataType = String(columnDef.definition.dataType);
     }
 
     const format = mapPostgreSQLType(dataType);
 
-    // Check constraints
+    // Check for primary key
     let isPrimaryKey = false;
-    let isNotNull = false;
-    let foreignKey: string | undefined;
-    let defaultValue: any;
+    if (columnDef.primary_key === 'primary key') {
+      isPrimaryKey = true;
+    }
 
-    // Check nullable
-    if (columnDef.nullable !== undefined) {
+    // Check nullable - handle null value safely
+    let isNotNull = false;
+    if (columnDef.nullable !== null && columnDef.nullable !== undefined) {
       isNotNull = columnDef.nullable.type === 'not null';
     }
 
     // Check default value
-    if (columnDef.default_val) {
+    let defaultValue: any;
+    if (columnDef.default_val && columnDef.default_val.type !== null) {
       defaultValue = extractDefaultValue(columnDef.default_val);
     }
 
     // Check for inline references (foreign key)
+    let foreignKey: string | undefined;
     if (columnDef.reference_definition) {
       const refTable = columnDef.reference_definition.table?.[0]?.table;
       const refColumn = columnDef.reference_definition.definition?.[0]?.column;
@@ -206,8 +204,6 @@ function parseColumnFromAST(columnDef: any): Column | null {
         foreignKey = `${refTable}.${refColumn}`;
       }
     }
-
-    console.log('Parsed column:', { columnName, format, dataType });
 
     return {
       title: columnName,
@@ -280,6 +276,11 @@ function processAlterTable(statement: any, tables: TableState): void {
 function extractDefaultValue(defaultVal: any): any {
   if (!defaultVal) return undefined;
 
+  // Handle 'default' wrapper
+  if (defaultVal.type === 'default' && defaultVal.value) {
+    return extractDefaultValue(defaultVal.value);
+  }
+
   if (defaultVal.type === 'single_quote_string' || defaultVal.type === 'string') {
     return defaultVal.value;
   }
@@ -293,6 +294,10 @@ function extractDefaultValue(defaultVal: any): any {
   }
 
   if (defaultVal.type === 'function') {
+    // Handle nested function name structure
+    if (defaultVal.name?.name?.[0]?.value) {
+      return `${defaultVal.name.name[0].value}()`;
+    }
     return `${defaultVal.name}()`;
   }
 
