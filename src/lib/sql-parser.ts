@@ -76,6 +76,9 @@ function extractTableInfo(statement: any): { name: string; schema: string; colum
 
     const tableName = tableInfo.table;
     const schema = tableInfo.db || 'public';
+
+    console.log(`Extracting table: ${tableName}, schema: ${schema}, db field:`, tableInfo.db);
+
     const columns: Column[] = [];
 
     // Parse column definitions
@@ -226,19 +229,29 @@ function parseColumnFromAST(columnDef: any): Column | null {
 function processAlterTable(statement: any, tables: TableState): void {
   try {
     const tableInfo = statement.table?.[0];
-    if (!tableInfo) return;
+    if (!tableInfo) {
+      console.log('ALTER TABLE: no table info found');
+      return;
+    }
 
     const tableName = tableInfo.table;
+    console.log(`Processing ALTER TABLE for: ${tableName}`);
+
     const table = tables[tableName];
-    if (!table) return;
+    if (!table) {
+      console.warn(`ALTER TABLE: table ${tableName} not found in tables list`);
+      return;
+    }
 
     // Check for ADD CONSTRAINT
     if (statement.expr?.type === 'add' && statement.expr.constraint_type) {
       const constraint = statement.expr;
+      console.log(`  Found constraint type: ${constraint.constraint_type}`);
 
       // Handle PRIMARY KEY
       if (constraint.constraint_type === 'primary key') {
         const pkColumns = constraint.definition || [];
+        console.log(`  Adding PRIMARY KEY to columns:`, pkColumns.map((c: any) => c.column));
         pkColumns.forEach((pkCol: any) => {
           const colName = pkCol.column;
           const col = table.columns?.find(c => c.title === colName);
@@ -255,15 +268,22 @@ function processAlterTable(statement: any, tables: TableState): void {
         const refTable = constraint.reference_definition?.table?.[0]?.table;
         const refColumns = constraint.reference_definition?.definition || [];
 
+        console.log(`  Adding FOREIGN KEY: ${tableName}.${fkColumns[0]?.column} -> ${refTable}.${refColumns[0]?.column}`);
+
         if (fkColumns.length > 0 && refColumns.length > 0 && refTable) {
           const colName = fkColumns[0].column;
           const refColName = refColumns[0].column;
           const col = table.columns?.find(c => c.title === colName);
           if (col) {
             col.fk = `${refTable}.${refColName}`;
+            console.log(`  ✅ FK added to column: ${colName}`);
+          } else {
+            console.warn(`  ❌ Column ${colName} not found in table ${tableName}`);
           }
         }
       }
+    } else {
+      console.log(`  No ADD CONSTRAINT found in ALTER TABLE. expr:`, statement.expr);
     }
   } catch (error) {
     console.error('Error processing ALTER TABLE:', error);
