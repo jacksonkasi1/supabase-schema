@@ -16,12 +16,13 @@ Phase 4 focuses on enhancing the schema visualization with professional features
 ## Pending Tasks
 
 ### 🔴 Critical (Foundation)
-- [ ] **Table grouping by schema**
-  - Visual schema grouping with colored boundaries
-  - Collapsible schema groups
-  - Schema-based filtering
-  - Group positioning and layout
-  - Settings to show/hide schemas
+- [x] **Table grouping by schema** ✅ COMPLETED
+  - Schema detection from SQL CREATE statements
+  - Schema-based filtering with visibility controls
+  - Group positioning and layout (auto-layout groups by schema)
+  - Settings to show/hide schemas (SchemaFilter panel)
+  - Color-coded schema indicators
+  - LocalStorage persistence for schema preferences
 
 ### 🟡 High Priority (Core Features)
 - [ ] **Relationship filtering**
@@ -234,9 +235,16 @@ Phase 4 focuses on enhancing the schema visualization with professional features
 - ✅ SQL import with drag-and-drop
 - ✅ SQL export direct download
 - ✅ Schema overwrite confirmation dialog
+- ✅ **Table grouping by schema** (Critical Priority)
+  - Schema detection and extraction from SQL
+  - SchemaFilter control panel in top-right
+  - Schema-aware auto-layout (groups positioned horizontally)
+  - Visibility toggle per schema with persistence
+  - Color-coded schema indicators
+  - Show All / Hide All controls
 
 ### In Progress 🚧
-- None (Ready for next task)
+- None (Ready for next task: Relationship Filtering)
 
 ### Blocked ⛔
 - None
