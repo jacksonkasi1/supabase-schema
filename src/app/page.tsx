@@ -7,6 +7,7 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { ImportSQL } from '@/components/ImportSQL';
 import { SearchBar } from '@/components/SearchBar';
+import { SchemaFilter } from '@/components/flow/SchemaFilter';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,6 +40,9 @@ export default function HomePage() {
 
         {/* Search Bar */}
         <SearchBar onJumpToTable={triggerFocusTable} />
+
+        {/* Schema Filter */}
+        <SchemaFilter />
 
         <Helper onChatOpen={() => setIsChatOpen(!isChatOpen)} isChatOpen={isChatOpen} />
         <FlowCanvas />

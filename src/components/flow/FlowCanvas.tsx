@@ -36,7 +36,7 @@ const edgeTypes = {
 };
 
 function FlowCanvasInner() {
-  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger, focusTableId, focusTableTrigger } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger, focusTableId, focusTableTrigger, visibleSchemas } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
@@ -70,8 +70,18 @@ function FlowCanvasInner() {
 
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
-    const flowNodes = tablesToNodes(tables);
-    const flowEdges = tablesToEdges(tables).map((edge) => {
+    // Filter tables by visible schemas
+    const filteredTables = Object.entries(tables).reduce((acc, [key, table]) => {
+      const schema = table.schema || 'public';
+      // Show table if: visibleSchemas is empty (show all) OR schema is in visibleSchemas
+      if (visibleSchemas.size === 0 || visibleSchemas.has(schema)) {
+        acc[key] = table;
+      }
+      return acc;
+    }, {} as typeof tables);
+
+    const flowNodes = tablesToNodes(filteredTables);
+    const flowEdges = tablesToEdges(filteredTables).map((edge) => {
       const relationshipType = getEdgeRelationship(edge.id);
 
       // Configure markers based on relationship type
@@ -102,7 +112,7 @@ function FlowCanvasInner() {
     });
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [tables, setNodes, setEdges, getEdgeRelationship]);
+  }, [tables, visibleSchemas, setNodes, setEdges, getEdgeRelationship]);
 
   // Listen for layout trigger from store
   useEffect(() => {
