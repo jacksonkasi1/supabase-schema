@@ -25,6 +25,11 @@ interface AppState {
   zoomOutTrigger: number;
   triggerZoomOut: () => void;
 
+  // Search and focus
+  focusTableId: string | null;
+  focusTableTrigger: number;
+  triggerFocusTable: (tableId: string) => void;
+
   // Selection and highlighting
   tableSelected: Set<Element>;
   setTableSelected: (selected: Set<Element>) => void;
@@ -83,6 +88,8 @@ export const useStore = create<AppState>((set, get) => ({
   fitViewTrigger: 0,
   zoomInTrigger: 0,
   zoomOutTrigger: 0,
+  focusTableId: null,
+  focusTableTrigger: 0,
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
@@ -156,6 +163,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   triggerZoomOut: () => {
     set((state) => ({ zoomOutTrigger: state.zoomOutTrigger + 1 }));
+  },
+
+  triggerFocusTable: (tableId) => {
+    set((state) => ({
+      focusTableId: tableId,
+      focusTableTrigger: state.focusTableTrigger + 1,
+      tableHighlighted: tableId, // Also highlight the table
+    }));
   },
 
   setTableSelected: (selected) => set({ tableSelected: selected }),

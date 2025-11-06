@@ -36,7 +36,7 @@ const edgeTypes = {
 };
 
 function FlowCanvasInner() {
-  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger, focusTableId, focusTableTrigger } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
@@ -152,6 +152,22 @@ function FlowCanvasInner() {
       }, 250);
     }
   }, [zoomOutTrigger, zoomOut, getZoom]);
+
+  // Listen for focus table trigger (from search)
+  useEffect(() => {
+    if (focusTableTrigger > 0 && focusTableId) {
+      const node = nodes.find((n) => n.id === focusTableId);
+      if (node) {
+        // Center and zoom to the selected node
+        fitView({
+          nodes: [node],
+          padding: 0.3,
+          duration: 600,
+          maxZoom: 1.2,
+        });
+      }
+    }
+  }, [focusTableTrigger, focusTableId, nodes, fitView]);
 
   // Emit initial zoom level and listen for zoom changes
   useEffect(() => {

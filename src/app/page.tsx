@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useStore } from '@/lib/store';
 import { Helper } from '@/components/Helper';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { ImportSQL } from '@/components/ImportSQL';
+import { SearchBar } from '@/components/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,6 +14,7 @@ import { cn } from '@/lib/utils';
 export default function HomePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const { triggerFocusTable } = useStore();
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
@@ -33,6 +36,9 @@ export default function HomePage() {
             Import SQL
           </Button>
         </div>
+
+        {/* Search Bar */}
+        <SearchBar onJumpToTable={triggerFocusTable} />
 
         <Helper onChatOpen={() => setIsChatOpen(!isChatOpen)} isChatOpen={isChatOpen} />
         <FlowCanvas />
