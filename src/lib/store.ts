@@ -67,6 +67,9 @@ interface AppState {
 
   // Save to localStorage
   saveToLocalStorage: () => void;
+
+  // Clear localStorage cache
+  clearCache: () => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -75,6 +78,32 @@ const checkView = (title: string, paths: any) => {
   }
   return false;
 };
+
+// Debounced localStorage save to prevent excessive writes
+let saveTimeoutId: NodeJS.Timeout | null = null;
+const SAVE_DEBOUNCE_MS = 500; // Wait 500ms before saving
+const MAX_STORAGE_SIZE = 5 * 1024 * 1024; // 5MB limit
+
+function debouncedSave(saveFn: () => void) {
+  if (saveTimeoutId) {
+    clearTimeout(saveTimeoutId);
+  }
+  saveTimeoutId = setTimeout(() => {
+    saveFn();
+    saveTimeoutId = null;
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function getStorageSize(): number {
+  if (typeof window === 'undefined') return 0;
+  let total = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      total += localStorage[key].length + key.length;
+    }
+  }
+  return total;
+}
 
 export const useStore = create<AppState>((set, get) => ({
   // Initial state
@@ -325,14 +354,80 @@ export const useStore = create<AppState>((set, get) => ({
   saveToLocalStorage: () => {
     if (typeof window === 'undefined') return;
 
+    // Debounce the save operation to prevent excessive writes
+    debouncedSave(() => {
+      try {
+        const state = get();
+
+        // Check current storage size before saving
+        const currentSize = getStorageSize();
+        if (currentSize > MAX_STORAGE_SIZE) {
+          console.warn(`localStorage size (${(currentSize / 1024 / 1024).toFixed(2)}MB) exceeds limit. Clearing old data...`);
+          // Clear only table data, keep user preferences
+          localStorage.removeItem('table-list');
+          localStorage.removeItem('edge-relationships');
+        }
+
+        // Store data with size-optimized JSON (no extra whitespace)
+        const tablesJson = JSON.stringify(state.tables);
+        const edgeRelationshipsJson = JSON.stringify(state.edgeRelationships);
+        const visibleSchemasJson = JSON.stringify(Array.from(state.visibleSchemas));
+        const collapsedSchemasJson = JSON.stringify(Array.from(state.collapsedSchemas));
+
+        // Check individual item sizes before saving
+        const totalNewSize = tablesJson.length + edgeRelationshipsJson.length +
+                            visibleSchemasJson.length + collapsedSchemasJson.length;
+
+        if (totalNewSize > MAX_STORAGE_SIZE) {
+          console.error(`Cannot save: Data size (${(totalNewSize / 1024 / 1024).toFixed(2)}MB) exceeds ${MAX_STORAGE_SIZE / 1024 / 1024}MB limit`);
+          // Show warning to user
+          if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('storage:exceeded', {
+              detail: { size: totalNewSize, limit: MAX_STORAGE_SIZE }
+            }));
+          }
+          return;
+        }
+
+        localStorage.setItem('table-list', tablesJson);
+        localStorage.setItem('edge-relationships', edgeRelationshipsJson);
+        localStorage.setItem('visible-schemas', visibleSchemasJson);
+        localStorage.setItem('collapsed-schemas', collapsedSchemasJson);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'QuotaExceededError') {
+          console.error('localStorage quota exceeded. Clearing cache...');
+          get().clearCache();
+        } else {
+          console.error('Error saving to localStorage:', error);
+        }
+      }
+    });
+  },
+
+  clearCache: () => {
+    if (typeof window === 'undefined') return;
+
     try {
-      const state = get();
-      localStorage.setItem('table-list', JSON.stringify(state.tables));
-      localStorage.setItem('edge-relationships', JSON.stringify(state.edgeRelationships));
-      localStorage.setItem('visible-schemas', JSON.stringify(Array.from(state.visibleSchemas)));
-      localStorage.setItem('collapsed-schemas', JSON.stringify(Array.from(state.collapsedSchemas)));
+      // Clear all schema-related data from localStorage
+      localStorage.removeItem('table-list');
+      localStorage.removeItem('edge-relationships');
+      localStorage.removeItem('visible-schemas');
+      localStorage.removeItem('collapsed-schemas');
+
+      // Clear timeout if pending
+      if (saveTimeoutId) {
+        clearTimeout(saveTimeoutId);
+        saveTimeoutId = null;
+      }
+
+      console.log('Cache cleared successfully');
+
+      // Dispatch event for UI feedback
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('storage:cleared'));
+      }
     } catch (error) {
-      console.error('Error saving to localStorage:', error);
+      console.error('Error clearing cache:', error);
     }
   },
 }));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { parseSQLSchema } from '@/lib/sql-parser';
 import {
@@ -219,6 +219,15 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
       onClose();
     }
   }, [isProcessing, resetState, onClose]);
+
+  // Cleanup on unmount - release file references
+  useEffect(() => {
+    return () => {
+      // Clear any pending file references
+      setFile(null);
+      setPendingImport(null);
+    };
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
