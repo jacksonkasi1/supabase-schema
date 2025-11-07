@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "ANALYZE=true next build",
+    "memlab:import": "memlab run --scenario memlab-tests/import-sql.js",
+    "memlab:interact": "memlab run --scenario memlab-tests/node-interaction.js",
+    "memlab:cache": "memlab run --scenario memlab-tests/cache-operations.js",
+    "memlab:all": "memlab run --scenario memlab-tests/import-sql.js && memlab run --scenario memlab-tests/node-interaction.js && memlab run --scenario memlab-tests/cache-operations.js",
+    "test:memory": "echo '⚠️  Start dev server first: npm run dev' && echo '⚠️  Then run: npm run memlab:all'"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
