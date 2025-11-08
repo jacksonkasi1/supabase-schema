@@ -16,12 +16,13 @@ Phase 4 focuses on enhancing the schema visualization with professional features
 ## Pending Tasks
 
 ### 🔴 Critical (Foundation)
-- [ ] **Table grouping by schema**
-  - Visual schema grouping with colored boundaries
-  - Collapsible schema groups
-  - Schema-based filtering
-  - Group positioning and layout
-  - Settings to show/hide schemas
+- [x] **Table grouping by schema** ✅ COMPLETED
+  - Schema detection from SQL CREATE statements
+  - Schema-based filtering with visibility controls
+  - Group positioning and layout (auto-layout groups by schema)
+  - Settings to show/hide schemas (SchemaFilter panel)
+  - Color-coded schema indicators
+  - LocalStorage persistence for schema preferences
 
 ### 🟡 High Priority (Core Features)
 - [ ] **Relationship filtering**
@@ -31,7 +32,7 @@ Phase 4 focuses on enhancing the schema visualization with professional features
   - Filter by source/target table
   - Visual indicators for hidden relationships
 
-- [ ] **Search and filter tables**
+- [x] **Search and filter tables** ✅ COMPLETED
   - Global search bar component
   - Search by table/view name
   - Search by column name
@@ -39,6 +40,7 @@ Phase 4 focuses on enhancing the schema visualization with professional features
   - Highlight search results
   - Jump to table feature
   - Recent searches history
+  - Keyboard shortcuts (Ctrl/Cmd+F)
 
 ### 🟢 Medium Priority (Advanced Features)
 - [ ] **SQL query builder from diagram**
@@ -228,9 +230,21 @@ Phase 4 focuses on enhancing the schema visualization with professional features
 
 ### Completed ✅
 - ✅ Address code review comments (spacebar shortcut, clipboard error handling, handle ID collisions)
+- ✅ Search and filter tables with keyboard shortcuts (Ctrl/Cmd+F)
+- ✅ Auto-focus persistence bug fix
+- ✅ SQL import with drag-and-drop
+- ✅ SQL export direct download
+- ✅ Schema overwrite confirmation dialog
+- ✅ **Table grouping by schema** (Critical Priority)
+  - Schema detection and extraction from SQL
+  - SchemaFilter control panel in top-right
+  - Schema-aware auto-layout (groups positioned horizontally)
+  - Visibility toggle per schema with persistence
+  - Color-coded schema indicators
+  - Show All / Hide All controls
 
 ### In Progress 🚧
-- Planning Phase 4 implementation
+- None (Ready for next task: Relationship Filtering)
 
 ### Blocked ⛔
 - None

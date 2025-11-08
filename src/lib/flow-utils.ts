@@ -17,6 +17,7 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
         title: table.title,
         columns: table.columns || [],
         is_view: table.is_view,
+        schema: table.schema, // Include schema in node data (undefined if no schema)
       },
     };
   });
@@ -33,48 +34,70 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
 
     table.columns.forEach((column, sourceIndex) => {
       if (column.fk) {
-        // Parse FK format: "table_name.column_name"
-        const [targetTable, targetColumn] = column.fk.split('.');
+        // Parse FK format: "schema.table.column" or "table.column"
+        const fkParts = column.fk.split('.');
 
-        if (targetTable && targetColumn) {
-          const edgeId = `${table.title}.${column.title}-${targetTable}.${targetColumn}`;
-
-          // Find target column index in target table
-          const targetTableData = tables[targetTable];
-          const targetIndex = targetTableData?.columns?.findIndex(
-            (col) => col.title === targetColumn
-          ) ?? -1;
-
-          if (targetIndex === -1) {
-            console.warn(`Target column ${targetColumn} not found in table ${targetTable}`);
-            return;
-          }
-
-          // Create unique handle IDs matching TableNode format: tableName_columnName_index
-          const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
-          const targetHandleId = `${targetTable}_${targetColumn}_${targetIndex}`;
-
-          edges.push({
-            id: edgeId,
-            source: table.title,
-            target: targetTable,
-            sourceHandle: sourceHandleId,
-            targetHandle: targetHandleId,
-            type: 'smoothstep',
-            animated: false,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
-              color: '#6B7280', // gray-500
-            },
-            data: {
-              sourceColumn: column.title,
-              targetColumn: targetColumn,
-              relationshipType: 'one-to-many',
-            },
-          });
+        if (fkParts.length < 2) {
+          console.warn(
+            `Invalid FK format for column ${column.title} in table ${table.title}: ${column.fk}`
+          );
+          return;
         }
+
+        // Default to source table's schema if FK doesn't specify schema
+        let targetSchema = table.schema;
+        let targetTableName: string;
+        const targetColumn = fkParts.pop()!;
+
+        if (fkParts.length === 1) {
+          targetTableName = fkParts[0];
+          // If FK doesn't specify schema, use source table's schema (could be undefined)
+        } else {
+          targetSchema = fkParts.shift() || targetSchema;
+          targetTableName = fkParts.join('.');
+        }
+
+        // Build target table key - only include schema if present
+        const targetTableKey = targetSchema ? `${targetSchema}.${targetTableName}` : targetTableName;
+
+        const edgeId = `${table.title}.${column.title}-${targetTableKey}.${targetColumn}`;
+
+        // Find target column index in target table
+        const targetTableData = tables[targetTableKey];
+        const targetIndex =
+          targetTableData?.columns?.findIndex((col) => col.title === targetColumn) ?? -1;
+
+        if (targetIndex === -1) {
+          console.warn(
+            `Target column ${targetColumn} not found in table ${targetTableKey}`
+          );
+          return;
+        }
+
+        // Create unique handle IDs matching TableNode format: tableName_columnName_index
+        const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
+        const targetHandleId = `${targetTableKey}_${targetColumn}_${targetIndex}`;
+
+        edges.push({
+          id: edgeId,
+          source: table.title,
+          target: targetTableKey,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
+          type: 'smoothstep',
+          animated: false,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: '#6B7280', // gray-500
+          },
+          data: {
+            sourceColumn: column.title,
+            targetColumn: targetColumn,
+            relationshipType: 'one-to-many',
+          },
+        });
       }
     });
   });
@@ -112,11 +135,17 @@ export function calculateNodeDimensions(table: Table) {
   const height = headerHeight + (columnsCount * columnHeight) + padding;
 
   // Calculate width based on longest text
+  const titleLength = table.title?.length || 0;
+  const columnLengths = table.columns?.map(col => {
+    const colTitleLength = col?.title?.length || 0;
+    const colFormatLength = col?.format?.length || 0;
+    return colTitleLength + colFormatLength;
+  }) || [];
+
   const longestText = Math.max(
-    table.title.length,
-    ...(table.columns?.map(col =>
-      col.title.length + col.format.length
-    ) || [])
+    titleLength,
+    ...columnLengths,
+    0 // Ensure at least 0
   );
 
   const width = Math.min(
@@ -174,4 +203,83 @@ export function getConnectedEdges(
   return edges.filter(
     (edge) => edge.source === nodeId || edge.target === nodeId
   );
+}
+
+/**
+ * Group tables by schema
+ * Only groups tables that have an explicit schema defined
+ */
+export function groupTablesBySchema(tables: TableState): Record<string, string[]> {
+  const groups: Record<string, string[]> = {};
+
+  Object.values(tables).forEach((table) => {
+    // Only group if schema is explicitly present
+    if (table.schema) {
+      if (!groups[table.schema]) {
+        groups[table.schema] = [];
+      }
+      groups[table.schema].push(table.title);
+    }
+  });
+
+  return groups;
+}
+
+/**
+ * Get all unique schemas from tables
+ * Only returns schemas that are explicitly defined
+ */
+export function getAllSchemas(tables: TableState): string[] {
+  const schemas = new Set<string>();
+
+  Object.values(tables).forEach((table) => {
+    // Only add schema if it's explicitly present
+    if (table.schema) {
+      schemas.add(table.schema);
+    }
+  });
+
+  return Array.from(schemas).sort();
+}
+
+/**
+ * Calculate bounding box for a group of nodes
+ */
+export function calculateSchemaBoundingBox(
+  schemaName: string,
+  tables: TableState,
+  padding: number = 40
+): { x: number; y: number; width: number; height: number } | null {
+  // Get all tables in this schema
+  // Only match tables that have this schema explicitly defined
+  const schemaTables = Object.values(tables).filter(
+    (table) => table.schema === schemaName
+  );
+
+  if (schemaTables.length === 0) {
+    return null;
+  }
+
+  // Find min/max coordinates
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  schemaTables.forEach((table) => {
+    const pos = table.position || { x: 0, y: 0 };
+    const dimensions = calculateNodeDimensions(table);
+
+    minX = Math.min(minX, pos.x);
+    minY = Math.min(minY, pos.y);
+    maxX = Math.max(maxX, pos.x + dimensions.width);
+    maxY = Math.max(maxY, pos.y + dimensions.height);
+  });
+
+  return {
+    x: minX - padding,
+    y: minY - padding,
+    width: maxX - minX + (padding * 2),
+    height: maxY - minY + (padding * 2),
+  };
 }

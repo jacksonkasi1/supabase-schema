@@ -53,11 +53,23 @@ interface AppState {
   setEdgeRelationship: (edgeId: string, type: RelationshipType) => void;
   getEdgeRelationship: (edgeId: string) => RelationshipType;
 
+  // Schema grouping
+  visibleSchemas: Set<string>;
+  collapsedSchemas: Set<string>;
+  toggleSchemaVisibility: (schema: string) => void;
+  toggleSchemaCollapse: (schema: string) => void;
+  showAllSchemas: () => void;
+  hideAllSchemas: () => void;
+  getVisibleSchemas: () => string[];
+
   // Initialize from localStorage
   initializeFromLocalStorage: () => void;
 
   // Save to localStorage
   saveToLocalStorage: () => void;
+
+  // Clear localStorage cache
+  clearCache: () => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -67,7 +79,113 @@ const checkView = (title: string, paths: any) => {
   return false;
 };
 
-export const useStore = create<AppState>((set, get) => ({
+// Debounced localStorage save to prevent excessive writes
+let saveTimeoutId: NodeJS.Timeout | null = null;
+const SAVE_DEBOUNCE_MS = 500; // Wait 500ms before saving
+const MAX_STORAGE_SIZE = 5 * 1024 * 1024; // 5MB limit
+
+function debouncedSave(saveFn: () => void) {
+  if (saveTimeoutId) {
+    clearTimeout(saveTimeoutId);
+  }
+  saveTimeoutId = setTimeout(() => {
+    saveFn();
+    saveTimeoutId = null;
+  }, SAVE_DEBOUNCE_MS);
+}
+
+// Internal function to perform the actual save (used by both debounced and immediate saves)
+// Note: get() will be set by the store initialization
+let getStateFn: (() => AppState) | null = null;
+
+function performSave() {
+  if (typeof window === 'undefined' || !getStateFn) return;
+  
+  try {
+    const state = getStateFn();
+
+    // Check current storage size before saving
+    const currentSize = getStorageSize();
+    if (currentSize > MAX_STORAGE_SIZE) {
+      console.warn(`localStorage size (${(currentSize / 1024 / 1024).toFixed(2)}MB) exceeds limit. Clearing old data...`);
+      // Clear only table data, keep user preferences
+      localStorage.removeItem('table-list');
+      localStorage.removeItem('edge-relationships');
+    }
+
+    // Store data with size-optimized JSON (no extra whitespace)
+    const tablesJson = JSON.stringify(state.tables);
+    const edgeRelationshipsJson = JSON.stringify(state.edgeRelationships);
+    const visibleSchemasJson = JSON.stringify(Array.from(state.visibleSchemas));
+    const collapsedSchemasJson = JSON.stringify(Array.from(state.collapsedSchemas));
+
+    // Check individual item sizes before saving
+    const totalNewSize = tablesJson.length + edgeRelationshipsJson.length +
+                        visibleSchemasJson.length + collapsedSchemasJson.length;
+
+    if (totalNewSize > MAX_STORAGE_SIZE) {
+      console.error(`Cannot save: Data size (${(totalNewSize / 1024 / 1024).toFixed(2)}MB) exceeds ${MAX_STORAGE_SIZE / 1024 / 1024}MB limit`);
+      // Show warning to user
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('storage:exceeded', {
+          detail: { size: totalNewSize, limit: MAX_STORAGE_SIZE }
+        }));
+      }
+      return;
+    }
+
+    localStorage.setItem('table-list', tablesJson);
+    localStorage.setItem('edge-relationships', edgeRelationshipsJson);
+    localStorage.setItem('visible-schemas', visibleSchemasJson);
+    localStorage.setItem('collapsed-schemas', collapsedSchemasJson);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      console.error('localStorage quota exceeded. Clearing cache...');
+      if (getStateFn) {
+        getStateFn().clearCache();
+      }
+    } else {
+      console.error('Error saving to localStorage:', error);
+    }
+  }
+}
+
+// Flush pending saves immediately (for app close/unload)
+function flushPendingSave() {
+  if (saveTimeoutId) {
+    clearTimeout(saveTimeoutId);
+    saveTimeoutId = null;
+    // Execute the pending save immediately
+    performSave();
+  }
+}
+
+// Set up event listeners to flush on app close/unload
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', flushPendingSave);
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushPendingSave();
+    }
+  });
+}
+
+function getStorageSize(): number {
+  if (typeof window === 'undefined') return 0;
+  let total = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      total += localStorage[key].length + key.length;
+    }
+  }
+  return total;
+}
+
+export const useStore = create<AppState>((set, get) => {
+  // Set the get function for performSave to use
+  getStateFn = get;
+  
+  return {
   // Initial state
   isModalOpen: false,
   tables: {},
@@ -84,6 +202,8 @@ export const useStore = create<AppState>((set, get) => ({
     last_url: '',
   },
   edgeRelationships: {},
+  visibleSchemas: new Set<string>(),
+  collapsedSchemas: new Set<string>(),
   layoutTrigger: 0,
   fitViewTrigger: 0,
   zoomInTrigger: 0,
@@ -97,6 +217,7 @@ export const useStore = create<AppState>((set, get) => ({
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
     const currentTables = get().tables;
+    const newSchemas = new Set<string>();
 
     for (const [key, value] of Object.entries(definition)) {
       const colGroup: Column[] = [];
@@ -116,6 +237,16 @@ export const useStore = create<AppState>((set, get) => ({
         colGroup.push(col);
       });
 
+      // Extract schema from key if present (e.g., "public.users" -> "public")
+      // Keys with schema are in format "schema.tablename"
+      // If no schema is present, don't default to 'public' - use undefined instead
+      const keyParts = key.split('.');
+      const schema = keyParts.length > 1 ? keyParts[0] : undefined;
+      // Only add to schemas set if schema is actually present
+      if (schema) {
+        newSchemas.add(schema);
+      }
+
       // Preserve existing position if table already exists
       tableGroup[key] = {
         title: key,
@@ -124,10 +255,24 @@ export const useStore = create<AppState>((set, get) => ({
         position: currentTables[key]
           ? currentTables[key].position
           : { x: 0, y: 0 },
+        schema: schema, // Extract and set schema from key
       };
     }
 
     set({ tables: tableGroup });
+    
+    // Ensure all new schemas are visible when importing
+    const currentVisibleSchemas = get().visibleSchemas;
+    if (currentVisibleSchemas.size === 0) {
+      // If no schemas are visible, show all new schemas
+      set({ visibleSchemas: newSchemas });
+    } else {
+      // Add new schemas to visible set if they don't exist
+      const updatedVisibleSchemas = new Set(currentVisibleSchemas);
+      newSchemas.forEach(schema => updatedVisibleSchemas.add(schema));
+      set({ visibleSchemas: updatedVisibleSchemas });
+    }
+    
     get().saveToLocalStorage();
   },
 
@@ -222,6 +367,54 @@ export const useStore = create<AppState>((set, get) => ({
     return get().edgeRelationships[edgeId] || 'one-to-many';
   },
 
+  // Schema grouping actions
+  toggleSchemaVisibility: (schema) => {
+    set((state) => {
+      const newVisibleSchemas = new Set(state.visibleSchemas);
+      if (newVisibleSchemas.has(schema)) {
+        newVisibleSchemas.delete(schema);
+      } else {
+        newVisibleSchemas.add(schema);
+      }
+      return { visibleSchemas: newVisibleSchemas };
+    });
+    get().saveToLocalStorage();
+  },
+
+  toggleSchemaCollapse: (schema) => {
+    set((state) => {
+      const newCollapsedSchemas = new Set(state.collapsedSchemas);
+      if (newCollapsedSchemas.has(schema)) {
+        newCollapsedSchemas.delete(schema);
+      } else {
+        newCollapsedSchemas.add(schema);
+      }
+      return { collapsedSchemas: newCollapsedSchemas };
+    });
+    get().saveToLocalStorage();
+  },
+
+  showAllSchemas: () => {
+    const { tables } = get();
+    const allSchemas = new Set<string>();
+    Object.values(tables).forEach((table) => {
+      if (table.schema) {
+        allSchemas.add(table.schema);
+      }
+    });
+    set({ visibleSchemas: allSchemas });
+    get().saveToLocalStorage();
+  },
+
+  hideAllSchemas: () => {
+    set({ visibleSchemas: new Set<string>() });
+    get().saveToLocalStorage();
+  },
+
+  getVisibleSchemas: () => {
+    return Array.from(get().visibleSchemas);
+  },
+
   initializeFromLocalStorage: () => {
     if (typeof window === 'undefined') return;
 
@@ -245,20 +438,54 @@ export const useStore = create<AppState>((set, get) => ({
       if (edgeRelationshipsData) {
         set({ edgeRelationships: JSON.parse(edgeRelationshipsData) });
       }
+
+      const visibleSchemasData = localStorage.getItem('visible-schemas');
+      if (visibleSchemasData) {
+        set({ visibleSchemas: new Set(JSON.parse(visibleSchemasData)) });
+      } else {
+        // Default: show all schemas
+        get().showAllSchemas();
+      }
+
+      const collapsedSchemasData = localStorage.getItem('collapsed-schemas');
+      if (collapsedSchemasData) {
+        set({ collapsedSchemas: new Set(JSON.parse(collapsedSchemasData)) });
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
   },
 
   saveToLocalStorage: () => {
+    // Debounce the save operation to prevent excessive writes
+    debouncedSave(performSave);
+  },
+
+  clearCache: () => {
     if (typeof window === 'undefined') return;
 
     try {
-      const state = get();
-      localStorage.setItem('table-list', JSON.stringify(state.tables));
-      localStorage.setItem('edge-relationships', JSON.stringify(state.edgeRelationships));
+      // Clear all schema-related data from localStorage
+      localStorage.removeItem('table-list');
+      localStorage.removeItem('edge-relationships');
+      localStorage.removeItem('visible-schemas');
+      localStorage.removeItem('collapsed-schemas');
+
+      // Clear timeout if pending
+      if (saveTimeoutId) {
+        clearTimeout(saveTimeoutId);
+        saveTimeoutId = null;
+      }
+
+      console.log('Cache cleared successfully');
+
+      // Dispatch event for UI feedback
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('storage:cleared'));
+      }
     } catch (error) {
-      console.error('Error saving to localStorage:', error);
+      console.error('Error clearing cache:', error);
     }
   },
-}));
+  };
+});

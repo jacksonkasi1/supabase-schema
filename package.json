@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "ANALYZE=true next build",
+    "memlab:import": "memlab run --scenario memlab-tests/import-sql.js",
+    "memlab:interact": "memlab run --scenario memlab-tests/node-interaction.js",
+    "memlab:cache": "memlab run --scenario memlab-tests/cache-operations.js",
+    "memlab:all": "memlab run --scenario memlab-tests/import-sql.js && memlab run --scenario memlab-tests/node-interaction.js && memlab run --scenario memlab-tests/cache-operations.js",
+    "test:memory": "echo '⚠️  Start dev server first: npm run dev' && echo '⚠️  Then run: npm run memlab:all'"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",
@@ -30,6 +35,7 @@
     "html-to-image": "^1.11.11",
     "lucide-react": "^0.552.0",
     "next": "^15.0.3",
+    "pg": "^8.16.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-virtuoso": "^4.10.4",
@@ -45,6 +51,7 @@
     "@tailwindcss/typography": "^0.5.15",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",

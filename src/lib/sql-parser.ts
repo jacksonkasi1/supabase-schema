@@ -1,7 +1,113 @@
 import { TableState, Column } from './types';
 
 /**
- * Parse PostgreSQL CREATE TABLE statements into TableState format
+ * Parse SQL schema asynchronously (non-blocking for large files)
+ * Breaks up work into chunks to keep UI responsive
+ */
+export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
+  const tables: TableState = {};
+
+  // Remove comments
+  let cleanedSQL = sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const statements = cleanedSQL.split(';').filter(s => s.trim());
+
+  console.log(`[SQL Parser] Processing ${statements.length} statements...`);
+
+  // Process in batches to avoid blocking
+  const BATCH_SIZE = 10;
+
+  // First pass: CREATE TABLE/VIEW (in batches)
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    const batch = statements.slice(i, i + BATCH_SIZE);
+
+    // Yield control to browser every batch
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    for (const statement of batch) {
+      const trimmed = statement.trim();
+
+      // CREATE TABLE
+      const createTableMatch = trimmed.match(
+        /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+      );
+
+      if (createTableMatch) {
+        const schemaName = createTableMatch[1]; // undefined if no schema specified
+        const tableName = createTableMatch[2];
+        const columns = parseColumns(statement);
+
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
+        tables[uniqueKey] = {
+          title: tableName,
+          is_view: false,
+          columns: columns,
+          position: { x: 0, y: 0 },
+          schema: schemaName // undefined if no schema specified
+        };
+      }
+
+      // CREATE VIEW
+      const createViewMatch = trimmed.match(
+        /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+      );
+
+      if (createViewMatch) {
+        const schemaName = createViewMatch[1]; // undefined if no schema specified
+        const viewName = createViewMatch[2];
+
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${viewName}` : viewName;
+        tables[uniqueKey] = {
+          title: viewName,
+          is_view: true,
+          columns: [],
+          position: { x: 0, y: 0 },
+          schema: schemaName // undefined if no schema specified
+        };
+      }
+    }
+
+    // Log progress every 50 statements
+    if (i % 50 === 0 && i > 0) {
+      console.log(`[SQL Parser] Processed ${i}/${statements.length} statements...`);
+    }
+  }
+
+  console.log(`[SQL Parser] Found ${Object.keys(tables).length} tables/views`);
+
+  // Second pass: ALTER TABLE (in batches)
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    const batch = statements.slice(i, i + BATCH_SIZE);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    for (const statement of batch) {
+      const trimmed = statement.trim();
+
+      const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
+
+      if (alterTableMatch) {
+        const schemaName = alterTableMatch[1]; // undefined if no schema specified
+        const tableName = alterTableMatch[2];
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
+
+        parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
+        parsePrimaryKeysFromAlter(tables, uniqueKey, trimmed);
+      }
+    }
+  }
+
+  console.log(`[SQL Parser] ✅ Parsing complete`);
+  return tables;
+}
+
+/**
+ * Parse PostgreSQL CREATE TABLE statements into TableState format (SYNCHRONOUS - may block UI)
  */
 export function parseSQLSchema(sql: string): TableState {
   const tables: TableState = {};
@@ -24,15 +130,20 @@ export function parseSQLSchema(sql: string): TableState {
     );
 
     if (createTableMatch) {
-      // Use table name (with or without schema prefix)
+      // Extract schema and table name
+      const schemaName = createTableMatch[1]; // undefined if no schema specified
       const tableName = createTableMatch[2]; // Always use the actual table name, not schema
       const columns = parseColumns(statement);
 
-      tables[tableName] = {
+      // Only include schema in key if schema is explicitly specified
+      // This avoids adding 'public.' prefix when no schema is mentioned
+      const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
+      tables[uniqueKey] = {
         title: tableName,
         is_view: false,
         columns: columns,
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        schema: schemaName // undefined if no schema specified
       };
     }
 
@@ -43,13 +154,17 @@ export function parseSQLSchema(sql: string): TableState {
     );
 
     if (createViewMatch) {
+      const schemaName = createViewMatch[1]; // undefined if no schema specified
       const viewName = createViewMatch[2]; // Use actual view name, not schema
 
-      tables[viewName] = {
+      // Only include schema in key if schema is explicitly specified
+      const uniqueKey = schemaName ? `${schemaName}.${viewName}` : viewName;
+      tables[uniqueKey] = {
         title: viewName,
         is_view: true,
         columns: [],
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        schema: schemaName // undefined if no schema specified
       };
     }
   }
@@ -58,17 +173,21 @@ export function parseSQLSchema(sql: string): TableState {
   for (const statement of statements) {
     const trimmed = statement.trim();
 
-    // Match ALTER TABLE statements
-    const alterTableMatch = trimmed.match(/alter\s+table\s+["']?(\w+)["']?/i);
+    // Match ALTER TABLE statements (handle schema prefixes like public.users or just users)
+    const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
 
     if (alterTableMatch) {
-      const tableName = alterTableMatch[1];
+      const schemaName = alterTableMatch[1]; // undefined if no schema specified
+      const tableName = alterTableMatch[2]; // Use the table name, ignore schema prefix
+
+      // Only include schema in key if schema is explicitly specified
+      const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
 
       // Parse foreign keys
-      parseForeignKeysFromAlter(tables, tableName, trimmed);
+      parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
 
       // Parse primary keys from ALTER TABLE statements
-      parsePrimaryKeysFromAlter(tables, tableName, trimmed);
+      parsePrimaryKeysFromAlter(tables, uniqueKey, trimmed);
     }
   }
 
@@ -185,18 +304,19 @@ function parseColumnDefinition(def: string): Column | null {
 
 /**
  * Parse foreign keys from ALTER TABLE statements
+ * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
  */
-function parseForeignKeysFromAlter(tables: TableState, tableName: string, alterStmt: string): void {
+function parseForeignKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
   // Match: ALTER TABLE "table" ADD CONSTRAINT "name" FOREIGN KEY("col") REFERENCES "ref_table"("ref_col")
   const fkMatch = alterStmt.match(/add\s+constraint\s+["']?\w+["']?\s+foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
 
-  if (fkMatch && tables[tableName]) {
+  if (fkMatch && tables[tableKey]) {
     const columnName = fkMatch[1];
     const refTable = fkMatch[2];
     const refColumn = fkMatch[3];
 
     // Find the column and add FK reference
-    const column = tables[tableName].columns?.find(c => c.title === columnName);
+    const column = tables[tableKey].columns?.find(c => c.title === columnName);
     if (column) {
       column.fk = `${refTable}.${refColumn}`;
     }
@@ -205,16 +325,17 @@ function parseForeignKeysFromAlter(tables: TableState, tableName: string, alterS
 
 /**
  * Parse primary keys from ALTER TABLE statements
+ * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
  */
-function parsePrimaryKeysFromAlter(tables: TableState, tableName: string, alterStmt: string): void {
+function parsePrimaryKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
   // Match: ALTER TABLE "table" ADD PRIMARY KEY("col")
   const pkMatch = alterStmt.match(/add\s+primary\s+key\s*\(["']?(\w+)["']?\)/i);
 
-  if (pkMatch && tables[tableName]) {
+  if (pkMatch && tables[tableKey]) {
     const columnName = pkMatch[1];
 
     // Find the column and mark as primary key
-    const column = tables[tableName].columns?.find(c => c.title === columnName);
+    const column = tables[tableKey].columns?.find(c => c.title === columnName);
     if (column) {
       column.pk = true;
       column.required = true;

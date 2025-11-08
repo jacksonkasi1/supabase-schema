@@ -5,7 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
 import { useTheme } from '@/components/theme-provider';
-import { Github, Network, Bot, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
+import {
+  Github,
+  Network,
+  Settings as SettingsIcon,
+  Moon,
+  Sun,
+} from 'lucide-react';
 import Image from 'next/image';
 import {
   Sheet,
@@ -17,21 +23,34 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 interface SettingsProps {
   isFetching: boolean;
   setIsFetching: (isFetching: boolean) => void;
+  variant?: 'floating' | 'toolbar';
+  className?: string;
 }
 
-export function Settings({ setIsFetching }: SettingsProps) {
+export function Settings({
+  isFetching: _isFetching,
+  setIsFetching,
+  variant = 'floating',
+  className,
+}: SettingsProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { supabaseApiKey, setSupabaseApiKey, setTables, autoArrange } = useStore();
+  const { supabaseApiKey, setSupabaseApiKey, setTables, autoArrange } =
+    useStore();
   const [url, setUrl] = useState(supabaseApiKey.url);
   const [anon, setAnon] = useState(supabaseApiKey.anon);
+  const [connectionString, setConnectionString] = useState('');
+  const [importSource, setImportSource] = useState<'supabase' | 'postgres'>(
+    'supabase'
+  );
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
-  const [isAINew, setIsAINew] = useLocalStorage('is-ai-new', true);
   const [, setDefinitions] = useLocalStorage<any>('definitions', {});
   const { setTheme, isDark } = useTheme();
 
@@ -45,7 +64,18 @@ export function Settings({ setIsFetching }: SettingsProps) {
     setAnon(supabaseApiKey.anon);
   }, [supabaseApiKey]);
 
-  const fetchData = async () => {
+  const applySchema = (definitions: any, paths: any, shouldAutoArrange = true) => {
+    setDefinitions(definitions);
+    setTables(definitions, paths || {});
+    if (shouldAutoArrange) {
+      setTimeout(() => {
+        autoArrange();
+      }, 0);
+    }
+    setOpen(false);
+  };
+
+  const fetchSupabaseSchema = async () => {
     if (!url || !anon) return;
 
     setIsFetching(true);
@@ -56,26 +86,15 @@ export function Settings({ setIsFetching }: SettingsProps) {
 
       if (res.ok) {
         const contentType = res.headers.get('content-type');
-        if (contentType && contentType.indexOf('application/openapi+json') !== -1) {
+        if (
+          contentType &&
+          contentType.indexOf('application/openapi+json') !== -1
+        ) {
           const data = await res.json();
-          if (data.definitions) {
-            setDefinitions(data.definitions);
-
-            // Update the store with new API key
-            const newApiKey = { url, anon, last_url: supabaseApiKey.last_url };
-
-            if (supabaseApiKey.last_url !== url) {
-              // Clear tables if URL changed
-              setSupabaseApiKey({ ...newApiKey, last_url: url });
-              setTables(data.definitions, data.paths);
-              setTimeout(() => {
-                autoArrange();
-              }, 0);
-            } else {
-              setSupabaseApiKey(newApiKey);
-              setTables(data.definitions, data.paths);
-            }
-            setOpen(false);
+          if (data?.definitions) {
+            const lastUrlChanged = supabaseApiKey.last_url !== url;
+            setSupabaseApiKey({ url, anon, last_url: url });
+            applySchema(data.definitions, data.paths, lastUrlChanged);
           }
         } else {
           setError('Invalid link');
@@ -90,48 +109,71 @@ export function Settings({ setIsFetching }: SettingsProps) {
     }
   };
 
-  useEffect(() => {
-    if (pathname === '/ai') setIsAINew(false);
-  }, [pathname, setIsAINew]);
+  const fetchPostgresSchema = async () => {
+    if (!connectionString) {
+      setError('Connection string is required');
+      return;
+    }
+
+    setIsFetching(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/schema/postgres', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ connectionString }),
+      });
+
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || 'Failed to fetch schema');
+      }
+
+      const data = await res.json();
+
+      if (!data?.definitions) {
+        throw new Error('Schema response missing definitions');
+      }
+
+      applySchema(data.definitions, data.paths);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const isToolbarVariant = variant === 'toolbar';
+
+  const containerClasses = cn(
+    isToolbarVariant
+      ? 'flex flex-col gap-2'
+      : 'fixed right-5 top-5 z-50 flex flex-col gap-2',
+    'pointer-events-auto',
+    className
+  );
 
   return (
     <>
-      {/* Floating action buttons */}
-      <div className="fixed right-5 top-5 z-50 flex flex-col space-y-2">
+      <div className={containerClasses}>
         <Button
           variant="outline"
           size="icon"
           title="Schema"
           onClick={() => router.push('/')}
-          className={pathname === '/' ? 'bg-primary text-primary-foreground' : ''}
+          className={
+            pathname === '/' ? 'bg-primary text-primary-foreground' : ''
+          }
         >
           <Network size={20} />
         </Button>
 
-        <Button
-          variant="outline"
-          size="icon"
-          title="AI"
-          onClick={() => router.push('/ai')}
-          className={`relative ${pathname === '/ai' ? 'bg-primary text-primary-foreground' : ''}`}
-        >
-          <Bot size={20} />
-          {isAINew && (
-            <>
-              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1 animate-ping" />
-              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1" />
-            </>
-          )}
-        </Button>
-
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Settings"
-              className="mt-4"
-            >
+            <Button variant="outline" size="icon" title="Settings">
               <SettingsIcon size={20} />
             </Button>
           </SheetTrigger>
@@ -148,9 +190,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
               <SheetTitle className="text-3xl font-bold bg-gradient-to-r from-green-500 to-green-400 bg-clip-text text-transparent">
                 Supabase Schema
               </SheetTitle>
-              <SheetDescription>
-                Open Source • LocalStorage
-              </SheetDescription>
+              <SheetDescription>Open Source • LocalStorage</SheetDescription>
             </SheetHeader>
 
             <div className="flex items-center justify-center gap-4 mt-2">
@@ -164,65 +204,131 @@ export function Settings({ setIsFetching }: SettingsProps) {
               </a>
             </div>
 
+            <div className="mt-6 space-y-2">
+              <h3 className="font-semibold text-sm uppercase mb-2">
+                Import Source
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={importSource === 'supabase' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setImportSource('supabase');
+                    setError('');
+                  }}
+                >
+                  Supabase OpenAPI
+                </Button>
+                <Button
+                  type="button"
+                  variant={importSource === 'postgres' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setImportSource('postgres');
+                    setError('');
+                  }}
+                >
+                  Postgres Connection
+                </Button>
+              </div>
+            </div>
+
             <div className="mt-6 space-y-6">
               <div>
                 <h3 className="font-semibold text-sm uppercase mb-2">Steps</h3>
-                <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                  <li>
-                    Obtain OpenAPI URL following instruction{' '}
-                    <a
-                      className="underline hover:text-primary"
-                      target="_blank"
-                      href="https://github.com/zernonia/supabase-schema#-instructions"
-                      rel="noreferrer"
-                    >
-                      here
-                    </a>
-                  </li>
-                  <li>Paste the URL below</li>
-                  <li>Enjoy the Supabase Schema</li>
-                </ol>
+                {importSource === 'supabase' ? (
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    <li>
+                      Obtain OpenAPI URL following instruction{' '}
+                      <a
+                        className="underline hover:text-primary"
+                        target="_blank"
+                        href="https://github.com/zernonia/supabase-schema#-instructions"
+                        rel="noreferrer"
+                      >
+                        here
+                      </a>
+                    </li>
+                    <li>Paste the URL and anon key below</li>
+                    <li>Enjoy the Supabase Schema</li>
+                  </ol>
+                ) : (
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    <li>Provide a valid Postgres connection string</li>
+                    <li>Click Fetch Schema to introspect tables and views</li>
+                    <li>Review the imported structure in the editor</li>
+                  </ol>
+                )}
               </div>
 
-              <form className="space-y-4" onSubmit={(e) => {
-                e.preventDefault();
-                fetchData();
-              }}>
-                <div className="space-y-2">
-                  <label htmlFor="url" className="text-sm font-medium">
-                    URL
-                  </label>
-                  <Input
-                    id="url"
-                    type="text"
-                    name="url"
-                    placeholder="https://your-project.supabase.co"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                  />
-                </div>
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (importSource === 'supabase') {
+                    fetchSupabaseSchema();
+                  } else {
+                    fetchPostgresSchema();
+                  }
+                }}
+              >
+                {importSource === 'supabase' ? (
+                  <>
+                    <div className="space-y-2">
+                      <label htmlFor="url" className="text-sm font-medium">
+                        URL
+                      </label>
+                      <Input
+                        id="url"
+                        type="text"
+                        name="url"
+                        placeholder="https://your-project.supabase.co"
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="anon" className="text-sm font-medium">
-                    API KEY
-                  </label>
-                  <Input
-                    id="anon"
-                    type="text"
-                    name="anon"
-                    placeholder="your-anon-key"
-                    value={anon}
-                    onChange={(e) => setAnon(e.target.value)}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <label htmlFor="anon" className="text-sm font-medium">
+                        API KEY
+                      </label>
+                      <Input
+                        id="anon"
+                        type="text"
+                        name="anon"
+                        placeholder="your-anon-key"
+                        value={anon}
+                        onChange={(e) => setAnon(e.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="connection-string"
+                      className="text-sm font-medium"
+                    >
+                      Postgres Connection String
+                    </label>
+                    <Textarea
+                      id="connection-string"
+                      name="connection-string"
+                      rows={3}
+                      placeholder="postgresql://user:password@host:5432/database"
+                      value={connectionString}
+                      onChange={(e) => setConnectionString(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The connection string is used once to introspect your
+                      schema and is not stored locally.
+                    </p>
+                  </div>
+                )}
 
                 <Button type="submit" className="w-full">
                   Fetch Schema
                 </Button>
 
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
               </form>
             </div>
           </SheetContent>

@@ -40,7 +40,7 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
           const handleId = `${tableName}_${col.title}_${index}`;
 
           return (
-            <div key={`${col.title}_${index}`} className="relative">
+            <div key={handleId} className="relative">
               {/* Source Handle (right side) - for FK connections going out */}
               {col.fk && (
                 <Handle

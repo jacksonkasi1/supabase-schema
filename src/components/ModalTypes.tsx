@@ -48,63 +48,128 @@ export function ModalTypes({ open, onClose }: ModalTypesProps) {
       float8: 'number',
     };
 
-    let code = '';
-    const dependencies: any = {};
-    Object.entries(tables).forEach(([table, value]) => {
-      dependencies[table] = value.columns
-        ?.map((v) => v.fk?.split('.')[0])
-        .filter((v) => typeof v === 'string')
-        .filter((v) => table != v);
-    });
-    let keys = Object.keys(dependencies);
-    const output: string[] = [];
-
-    while (keys.length) {
-      for (let i in keys) {
-        let key = keys[i];
-        let d = dependencies[key];
-
-        if (d.every((dependency: any) => output.includes(dependency))) {
-          output.push(key);
-          keys.splice(+i, 1);
-        }
-      }
+    const tableEntries = Object.entries(tables);
+    if (tableEntries.length === 0) {
+      return '';
     }
 
-    output.forEach((v) => {
-      const table = v;
-      const value = tables[v];
+    // Map short table names (without schema) back to their full keys
+    const tableLookup = new Map<string, string>();
+    tableEntries.forEach(([key, value]) => {
+      tableLookup.set(key, key);
+      const parts = key.split('.');
+      const shortName = parts[parts.length - 1];
+      tableLookup.set(shortName, key);
+      if (value?.title) {
+        tableLookup.set(value.title, key);
+      }
+    });
+
+    // Build dependency graph (table -> referenced tables)
+    const dependencyMap = new Map<string, Set<string>>();
+    tableEntries.forEach(([key, value]) => {
+      const deps = new Set<string>();
+      (value.columns ?? []).forEach((column) => {
+        if (!column.fk) return;
+        const fkTableRaw = column.fk.split('.')[0];
+        if (!fkTableRaw) return;
+        const normalizedKey = tableLookup.get(fkTableRaw);
+        if (normalizedKey && normalizedKey !== key) {
+          deps.add(normalizedKey);
+        }
+      });
+      dependencyMap.set(key, deps);
+    });
+
+    // Kahn's algorithm for topological sorting with cycle fallback
+    const topologicalSort = (graph: Map<string, Set<string>>) => {
+      const indegree = new Map<string, number>();
+      const adjacency = new Map<string, Set<string>>();
+
+      graph.forEach((deps, node) => {
+        if (!indegree.has(node)) indegree.set(node, 0);
+        deps.forEach((dep) => {
+          if (!graph.has(dep)) return;
+          if (!adjacency.has(dep)) {
+            adjacency.set(dep, new Set());
+          }
+          const neighbors = adjacency.get(dep)!;
+          if (!neighbors.has(node)) {
+            neighbors.add(node);
+            indegree.set(node, (indegree.get(node) ?? 0) + 1);
+          }
+        });
+      });
+
+      const queue: string[] = [];
+      graph.forEach((_deps, node) => {
+        if ((indegree.get(node) ?? 0) === 0) {
+          queue.push(node);
+        }
+      });
+
+      const ordered: string[] = [];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        ordered.push(current);
+        const neighbors = adjacency.get(current);
+        if (!neighbors) continue;
+        neighbors.forEach((neighbor) => {
+          const nextIndegree = (indegree.get(neighbor) ?? 0) - 1;
+          indegree.set(neighbor, nextIndegree);
+          if (nextIndegree === 0) {
+            queue.push(neighbor);
+          }
+        });
+      }
+
+      if (ordered.length !== graph.size) {
+        const seen = new Set(ordered);
+        graph.forEach((_deps, node) => {
+          if (!seen.has(node)) {
+            ordered.push(node);
+          }
+        });
+      }
+
+      return ordered;
+    };
+
+    const orderedTables = topologicalSort(dependencyMap);
+
+    let code = '';
+    orderedTables.forEach((tableKey) => {
+      const table = tableKey;
+      const value = tables[tableKey];
+      if (!value) {
+        return;
+      }
 
       code += `interface ${capitalizeFirstLetter(table)} {\n`;
-      value.columns?.forEach((v) => {
-        // Set title
-        code += `  ${v.title}`;
+      (value.columns ?? []).forEach((column) => {
+        code += `  ${column.title}`;
 
-        // Check required?
-        if (!v.required) code += '?';
+        if (!column.required) code += '?';
         code += ': ';
 
-        // Map to Typescript types
-        code += referenceTable[v.format]
-          ? referenceTable[v.format]
-          : 'any // type unknown';
+        code += referenceTable[column.format] || 'any // type unknown';
 
-        // Check if Primary key or Foreign Key
-        if (v.pk) code += '   /* primary key */';
-        if (v.fk) code += `   /* foreign key to ${v.fk} */`;
+        if (column.pk) code += '   /* primary key */';
+        if (column.fk) code += `   /* foreign key to ${column.fk} */`;
         code += `;\n`;
       });
 
-      value.columns
-        ?.map((z) => z.fk)
-        .filter((z) => typeof z === 'string')
-        .forEach((z) => {
-          let reference = z?.split('.')[0] as string;
+      (value.columns ?? [])
+        .map((col) => col.fk)
+        .filter((fk): fk is string => typeof fk === 'string' && fk.length > 0)
+        .forEach((fk) => {
+          const reference = fk.split('.')[0];
           code += `  ${reference}?: ${capitalizeFirstLetter(reference)};\n`;
         });
 
       code += `};\n\n`;
     });
+
     return code;
   }, [tables]);
 

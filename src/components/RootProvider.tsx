@@ -4,14 +4,18 @@ import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import AES from 'crypto-js/aes';
 import UTF8 from 'crypto-js/enc-utf8';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Settings } from './Settings';
 import { Loading } from './Loading';
 import { getSampleData } from '@/data/sampleData';
+import { SchemaFilter } from './flow/SchemaFilter';
+import { Button } from '@/components/ui/button';
+import { Filter } from 'lucide-react';
 
 export function RootProvider({ children }: { children: React.ReactNode }) {
   const [isFetching, setIsFetching] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSchemaFilterOpen, setIsSchemaFilterOpen] = useState(false);
   const {
     setTables,
     setSchemaView,
@@ -20,6 +24,7 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
     autoArrange,
   } = useStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   // Initialize from localStorage on mount
   useEffect(() => {
@@ -97,6 +102,24 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [isInitialized, setTables, setSchemaView, setSupabaseApiKey, router]);
 
+  useEffect(() => {
+    if (pathname !== '/') {
+      setIsSchemaFilterOpen(false);
+    }
+  }, [pathname, setIsSchemaFilterOpen]);
+
+  useEffect(() => {
+    if (!isSchemaFilterOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSchemaFilterOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSchemaFilterOpen]);
+
   if (!isInitialized) {
     return <Loading />;
   }
@@ -104,7 +127,42 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <Settings isFetching={isFetching} setIsFetching={setIsFetching} />
+      {pathname === '/' ? (
+        <div className="fixed top-5 right-5 z-50 flex items-start gap-3 pointer-events-none">
+          {isSchemaFilterOpen && (
+            <SchemaFilter
+              className="pointer-events-auto"
+              onClose={() => setIsSchemaFilterOpen(false)}
+            />
+          )}
+          <div className="pointer-events-auto flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              title={
+                isSchemaFilterOpen ? 'Hide schema filter' : 'Show schema filter'
+              }
+              onClick={() => setIsSchemaFilterOpen((open) => !open)}
+              className={
+                isSchemaFilterOpen ? 'bg-primary text-primary-foreground' : ''
+              }
+            >
+              <Filter size={20} />
+            </Button>
+            <Settings
+              isFetching={isFetching}
+              setIsFetching={setIsFetching}
+              variant="toolbar"
+            />
+          </div>
+        </div>
+      ) : (
+        <Settings
+          isFetching={isFetching}
+          setIsFetching={setIsFetching}
+          variant="floating"
+        />
+      )}
       {isFetching && <Loading />}
     </>
   );

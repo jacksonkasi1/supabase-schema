@@ -4,5 +4,7 @@
     "source.fixAll": "explicit"
   },
   "editor.formatOnSave": true,
-  "typescript.preferences.autoImportFileExcludePatterns": ["vue-router"]
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    "vue-router"
+  ]
 }
