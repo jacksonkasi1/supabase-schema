@@ -669,18 +669,6 @@ function FlowCanvasInner() {
     }));
   }, [edges, highlightedEdges, selectedEdge]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Clear any pending operations
-      setNodes([]);
-      setEdges([]);
-      setHighlightedEdges(new Set());
-      setSelectedEdge(null);
-      setContextMenu(null);
-    };
-  }, [setNodes, setEdges]);
-
   return (
     <div className="w-full h-screen">
       <ReactFlow

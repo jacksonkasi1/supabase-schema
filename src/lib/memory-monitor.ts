@@ -34,7 +34,7 @@ export class MemoryMonitor {
     this.measurements = [];
 
     this.intervalId = setInterval(() => {
-      const memory = performance.memory;
+      const { memory } = performance;
       if (memory) {
         this.measurements.push(memory.usedJSHeapSize);
 

@@ -152,9 +152,7 @@ export function ModalTypes({ open, onClose }: ModalTypesProps) {
         if (!column.required) code += '?';
         code += ': ';
 
-        code += referenceTable[column.format]
-          ? referenceTable[column.format]
-          : 'any // type unknown';
+        code += referenceTable[column.format] || 'any // type unknown';
 
         if (column.pk) code += '   /* primary key */';
         if (column.fk) code += `   /* foreign key to ${column.fk} */`;
