@@ -1,11 +1,22 @@
 'use client';
 
+// ** import types
+import type { Table } from '@/lib/types';
+
+// ** import core packages
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+
+// ** import utils
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
-import { SQLCardItem, Table } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+// ** import ui components
 import { Button } from '@/components/ui/button';
-import { X, ArrowUp, Paperclip, MessageSquare, Trash2 } from 'lucide-react';
+import { X, ArrowUp, Paperclip, MessageSquare, Trash2, Clipboard, Link } from 'lucide-react';
 import { Field, FieldLabel } from '@/components/ui/field';
 import {
   InputGroup,
@@ -20,13 +31,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { SQLCard } from './SQLCard';
-import { cn } from '@/lib/utils';
-
-interface ChatMessage extends SQLCardItem {
-  id: string;
-  timestamp: number;
-}
 
 interface ChatSidebarProps {
   isOpen?: boolean;
@@ -37,21 +41,103 @@ export function ChatSidebar({
   isOpen = false,
   onOpenChange,
 }: ChatSidebarProps) {
-  const { tables } = useStore();
-  
+  const { tables, updateTablesFromAI, supabaseApiKey } = useStore();
+  const [aiProvider] = useLocalStorage<'openai' | 'google'>(
+    'ai-provider',
+    'openai'
+  );
+  const [openaiApiKey] = useLocalStorage<string>('ai-openai-key', '');
+  const [googleApiKey] = useLocalStorage<string>('ai-google-key', '');
+  const [openaiModel] = useLocalStorage<string>(
+    'ai-openai-model',
+    'gpt-4o-mini'
+  );
+  const [googleModel] = useLocalStorage<string>(
+    'ai-google-model',
+    'gemini-1.5-pro-latest'
+  );
+
   const setIsOpen = (value: boolean) => {
     onOpenChange?.(value);
   };
-  const [query, setQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useLocalStorage<ChatMessage[]>(
-    'chat-history',
-    []
-  );
+
+  // Manage input state manually (AI SDK 5 pattern)
+  const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Create transport with configuration
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/chat',
+        body: {
+          provider: aiProvider === 'google' ? 'google' : 'openai',
+          apiKey: aiProvider === 'google' ? googleApiKey : openaiApiKey,
+          model: aiProvider === 'google' ? googleModel : openaiModel,
+          schema: tables,
+        },
+      }),
+    [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel, tables]
+  );
+
+  // Use Vercel AI SDK 5's useChat hook
+  const {
+    messages,
+    sendMessage,
+    status,
+    setMessages,
+  } = useChat({
+    id: 'sql-assistant',
+    transport,
+    onFinish: ({ message }) => {
+      console.log('[onFinish] Message:', message);
+      console.log('[onFinish] Parts:', message.parts);
+
+      // Check if any tool results include schema updates
+      const toolParts = message.parts.filter(
+        (part: any) => {
+          console.log('[onFinish] Part:', part);
+          return part.type === 'tool' && part.toolName === 'modifySchema' && part.result;
+        }
+      );
+
+      console.log('[onFinish] Tool parts with modifySchema:', toolParts);
+
+      toolParts.forEach((tool: any) => {
+        const result = tool.result;
+        console.log('[onFinish] modifySchema result:', result);
+
+        if (result && typeof result === 'object' && 'tables' in result) {
+          console.log('[onFinish] Updating tables from AI:', result.tables);
+          updateTablesFromAI(result.tables);
+
+          const count = Array.isArray(result.operationsApplied)
+            ? result.operationsApplied.length
+            : 0;
+
+          if (count > 0) {
+            toast.success('Schema updated', {
+              description: `Applied ${count} change${count === 1 ? '' : 's'} via AI.`,
+            });
+          } else {
+            toast.success('Schema updated');
+          }
+        }
+      });
+    },
+    onError: (error) => {
+      console.error('Chat error:', error);
+      toast.error('Assistant request failed', {
+        description: error.message,
+      });
+    },
+  });
+
+  // Compute isLoading from status
+  const isLoading = status === 'streaming' || status === 'submitted';
 
   const listOfTables = useMemo(() => {
     const authUserTable: Table = {
@@ -73,18 +159,6 @@ export function ChatSidebar({
     return [];
   }, [tables]);
 
-  const tableSchema = useMemo(() => {
-    if (listOfTables.length === 0) return '';
-    return listOfTables
-      .map(
-        (table) =>
-          `${table?.title}(${table?.columns
-            ?.map((i) => `${i.title} ${i.format}`)
-            .join(',')})`
-      )
-      .join('\n#');
-  }, [listOfTables]);
-
   useEffect(() => {
     if (isOpen && textareaRef.current) {
       textareaRef.current.focus();
@@ -93,7 +167,7 @@ export function ChatSidebar({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory, isLoading]);
+  }, [messages, isLoading]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -104,122 +178,57 @@ export function ChatSidebar({
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const generateSQL = async () => {
-    if (!query.trim()) return;
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
 
-    const messageId = Date.now().toString();
-    const newMessage: ChatMessage = {
-      id: messageId,
-      query: query,
-      result: '',
-      timestamp: Date.now(),
-    };
+    const provider = aiProvider === 'google' ? 'google' : 'openai';
+    const apiKey = provider === 'google' ? googleApiKey : openaiApiKey;
 
-    setChatHistory((prev) => [...prev, newMessage]);
-    setQuery('');
-    setIsLoading(true);
+    if (!apiKey) {
+      toast.error('Missing API key', {
+        description:
+          provider === 'google'
+            ? 'Add your Google Gemini API key in Settings.'
+            : 'Add your OpenAI API key in Settings.',
+      });
+      return;
+    }
 
-    try {
-      // Handle file attachments if any
-      let fileData = '';
-      if (selectedFiles.length > 0) {
-        // For images, convert to base64 or description
-        const filePromises = selectedFiles.map((file) => {
-          return new Promise<string>((resolve) => {
-            if (file.type.startsWith('image/')) {
-              const reader = new FileReader();
-              reader.onload = () => {
-                resolve(`Image: ${file.name} (base64 data)`);
-              };
-              reader.readAsDataURL(file);
-            } else {
-              resolve(`File: ${file.name} (${file.type})`);
-            }
-          });
-        });
-        const fileDescriptions = await Promise.all(filePromises);
-        fileData = '\nAttached files:\n' + fileDescriptions.join('\n');
-      }
+    if (!input.trim()) return;
 
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          schema: tableSchema,
-          query: query + fileData,
-          chatHistory: chatHistory.map((msg) => ({
-            role: 'user',
-            content: msg.query,
+    // Send the message using AI SDK 5 pattern
+    await sendMessage(
+      { text: input },
+      {
+        body: {
+          attachments: selectedFiles.map((file) => ({
+            name: file.name,
+            type: file.type,
           })),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(response.statusText);
+        },
       }
+    );
 
-      const data = response.body;
-      if (!data) {
-        return;
-      }
-
-      const reader = data.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let result = '';
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value);
-        result += chunkValue;
-
-        setChatHistory((prev) => {
-          const updated = [...prev];
-          const messageIndex = updated.findIndex((m) => m.id === messageId);
-          if (messageIndex !== -1) {
-            updated[messageIndex] = {
-              ...updated[messageIndex],
-              result: result,
-            };
-          }
-          return updated;
-        });
-      }
-    } catch (err) {
-      console.error('Error generating SQL:', err);
-      setChatHistory((prev) => {
-        const updated = [...prev];
-        const messageIndex = updated.findIndex((m) => m.id === messageId);
-        if (messageIndex !== -1) {
-          updated[messageIndex] = {
-            ...updated[messageIndex],
-            result: 'Error: Failed to generate SQL. Please try again.',
-          };
-        }
-        return updated;
-      });
-    } finally {
-      setIsLoading(false);
-      setSelectedFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+    // Clear input and files after submission
+    setInput('');
+    setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      generateSQL();
+      const form = e.currentTarget.form;
+      if (form) {
+        form.requestSubmit();
+      }
     }
   };
 
   const clearChat = () => {
-    setChatHistory([]);
-    setQuery('');
+    setMessages([]);
     setSelectedFiles([]);
   };
 
@@ -230,12 +239,12 @@ export function ChatSidebar({
   return (
     <div
       className={cn(
-        "fixed top-0 right-0 h-full w-[420px] z-50",
-        "bg-background/95 backdrop-blur-xl",
-        "border-l border-border",
-        "shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]",
-        "transform transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-x-0" : "translate-x-full"
+        'fixed top-0 right-0 h-full w-[420px] z-[60]',
+        'bg-background/95 backdrop-blur-xl',
+        'border-l border-border',
+        'shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]',
+        'transform transition-transform duration-300 ease-in-out',
+        isOpen ? 'translate-x-0' : 'translate-x-full'
       )}
     >
       {/* Header */}
@@ -243,14 +252,14 @@ export function ChatSidebar({
         <div className="flex items-center gap-2">
           <MessageSquare size={20} />
           <h2 className="font-semibold text-lg">SQL AI Assistant</h2>
-          {chatHistory.length > 0 && (
+          {messages.length > 0 && (
             <Badge variant="secondary" className="ml-2">
-              {chatHistory.length}
+              {messages.filter((m) => m.role === 'user').length}
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {chatHistory.length > 0 && (
+          {messages.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -284,7 +293,7 @@ export function ChatSidebar({
 
       {/* Content */}
       <div className="overflow-y-auto p-4 space-y-4 h-[calc(100vh-8rem)]">
-        {chatHistory.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <MessageSquare size={48} className="mb-4 opacity-50" />
             <p className="text-sm">Start a conversation to generate SQL</p>
@@ -306,21 +315,131 @@ export function ChatSidebar({
             )}
           </div>
         ) : (
-          chatHistory.map((item) => (
-            <SQLCard
-              key={item.id}
-              item={item}
-              onDelete={() => {
-                setChatHistory((prev) =>
-                  prev.filter((msg) => msg.id !== item.id)
-                );
-              }}
-            />
-          ))
+          <div className="space-y-4">
+            {messages.map((message, index) => (
+              <div key={message.id} className="space-y-2">
+                {message.role === 'user' ? (
+                  /* User message - circular bubble */
+                  <div className="flex justify-end">
+                    <div className="bg-primary text-primary-foreground rounded-full px-4 py-2 max-w-[80%]">
+                      <p className="text-sm">
+                        {message.parts
+                          .filter((p: any) => p.type === 'text')
+                          .map((p: any) => p.text)
+                          .join('')}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Assistant response - simple rounded box */
+                  <div className="flex justify-start">
+                    <div className="bg-muted/50 rounded-2xl px-4 py-3 max-w-[85%] space-y-3">
+                        {/* Render text parts */}
+                        {message.parts.map((part: any, partIndex: number) => {
+                          if (part.type === 'text') {
+                            return (
+                              <div key={partIndex} className="text-sm whitespace-pre-wrap">
+                                {part.text || (
+                                  <span className="text-muted-foreground animate-pulse">
+                                    Thinking...
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+
+                        {/* Show tool invocations if any */}
+                        {message.parts.some((p: any) => p.type === 'tool') && (
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            {message.parts
+                              .filter((part: any) => part.type === 'tool')
+                              .map((tool: any, toolIndex: number) => (
+                                <div
+                                  key={toolIndex}
+                                  className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
+                                >
+                                  <span
+                                    className={cn(
+                                      'inline-flex h-2 w-2 rounded-full',
+                                      tool.result
+                                        ? 'bg-emerald-500'
+                                        : 'bg-amber-500 animate-pulse'
+                                    )}
+                                  />
+                                  <span className="font-medium">{tool.toolName}</span>
+                                  <span className="capitalize text-muted-foreground">
+                                    {tool.result ? 'completed' : 'running'}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        {message.parts.some((p: any) => p.type === 'text') && (
+                          <div className="flex items-center gap-2 pt-2 border-t">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Copy"
+                              onClick={async () => {
+                                const textContent = message.parts
+                                  .filter((p: any) => p.type === 'text')
+                                  .map((p: any) => p.text)
+                                  .join('\n');
+                                await navigator.clipboard.writeText(textContent);
+                                toast.success('Copied to clipboard');
+                              }}
+                            >
+                              <Clipboard size={16} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Open SQL Editor"
+                              onClick={async () => {
+                                const textContent = message.parts
+                                  .filter((p: any) => p.type === 'text')
+                                  .map((p: any) => p.text)
+                                  .join('\n');
+                                await navigator.clipboard.writeText(textContent);
+                                try {
+                                  const projectRef = new URL(supabaseApiKey.url).hostname.split('.')[0];
+                                  window.open(`https://app.supabase.com/project/${projectRef}/sql`, '_blank');
+                                } catch (error) {
+                                  console.error('Failed to open SQL tab:', error);
+                                }
+                              }}
+                            >
+                              <Link size={16} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 ml-auto text-destructive hover:text-destructive"
+                              title="Remove"
+                              onClick={() => {
+                                setMessages(messages.filter((_, i) => i !== index));
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
         {isLoading && (
           <div className="text-sm text-muted-foreground animate-pulse">
-            Generating SQL...
+            Generating response...
           </div>
         )}
         <div ref={chatEndRef} />
@@ -355,12 +474,7 @@ export function ChatSidebar({
 
         {/* Input Form */}
         <TooltipProvider>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              generateSQL();
-            }}
-          >
+          <form onSubmit={onSubmit}>
             <Field>
               <FieldLabel htmlFor="chat-input" className="sr-only">
                 Chat Input
@@ -369,8 +483,8 @@ export function ChatSidebar({
                 <InputGroupTextarea
                   id="chat-input"
                   ref={textareaRef}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask, search, or make anything..."
                   rows={3}
@@ -410,7 +524,7 @@ export function ChatSidebar({
                         className="rounded-full h-8 w-8"
                         variant="default"
                         size="icon"
-                        disabled={isLoading || !query.trim()}
+                        disabled={isLoading || !input.trim()}
                       >
                         <ArrowUp size={16} />
                       </InputGroupButton>

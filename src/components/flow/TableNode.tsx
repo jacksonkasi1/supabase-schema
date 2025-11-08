@@ -39,7 +39,6 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
         <div className="pb-2">
           {tableData.columns?.map((col, index) => {
             const handleId = `${tableName}_${col.title}_${index}`;
-            const showEnumInfo = Boolean(col.enumTypeName && col.enumValues && col.enumValues.length > 0);
             const hasDefault = col.default !== undefined && col.default !== null && `${col.default}` !== '';
             const defaultLabel = hasDefault
               ? typeof col.default === 'string'
@@ -104,7 +103,7 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
                                 <div className="flex flex-wrap gap-1">
                                   {col.enumValues.map((value, idx) => (
                                     <span key={idx} className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">
-                                      '{value}'
+                                      &apos;{value}&apos;
                                     </span>
                                   ))}
                                 </div>

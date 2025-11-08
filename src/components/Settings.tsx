@@ -52,6 +52,26 @@ export function Settings({
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const [, setDefinitions] = useLocalStorage<any>('definitions', {});
+  const [aiProvider, setAiProvider] = useLocalStorage<'openai' | 'google'>(
+    'ai-provider',
+    'openai'
+  );
+  const [openaiApiKey, setOpenaiApiKey] = useLocalStorage<string>(
+    'ai-openai-key',
+    ''
+  );
+  const [openaiModel, setOpenaiModel] = useLocalStorage<string>(
+    'ai-openai-model',
+    'gpt-4o-mini'
+  );
+  const [googleApiKey, setGoogleApiKey] = useLocalStorage<string>(
+    'ai-google-key',
+    ''
+  );
+  const [googleModel, setGoogleModel] = useLocalStorage<string>(
+    'ai-google-model',
+    'gemini-1.5-pro-latest'
+  );
   const { setTheme, isDark } = useTheme();
 
   const toggleTheme = () => {
@@ -330,6 +350,118 @@ export function Settings({
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </form>
+
+              <div className="space-y-4 border-t border-border/50 pt-6">
+                <div>
+                  <h3 className="font-semibold text-sm uppercase mb-2">
+                    AI Assistant
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Configure API access for the schema assistant. Keys stay in
+                    your browser&apos;s storage.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={aiProvider === 'openai' ? 'default' : 'outline'}
+                    onClick={() => setAiProvider('openai')}
+                  >
+                    OpenAI
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={aiProvider === 'google' ? 'default' : 'outline'}
+                    onClick={() => setAiProvider('google')}
+                  >
+                    Google Gemini
+                  </Button>
+                </div>
+
+                {aiProvider === 'openai' ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="openai-api-key"
+                        className="text-sm font-medium"
+                      >
+                        OpenAI API Key
+                      </label>
+                      <Input
+                        id="openai-api-key"
+                        type="password"
+                        value={openaiApiKey}
+                        placeholder="sk-..."
+                        autoComplete="off"
+                        onChange={(event) =>
+                          setOpenaiApiKey(event.target.value.trim())
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="openai-model"
+                        className="text-sm font-medium"
+                      >
+                        Model
+                      </label>
+                      <Input
+                        id="openai-model"
+                        value={openaiModel}
+                        onChange={(event) =>
+                          setOpenaiModel(event.target.value.trim())
+                        }
+                        placeholder="gpt-4o-mini"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Recommended: <code>gpt-4o-mini</code> or{' '}
+                        <code>gpt-4.1-mini</code>.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="gemini-api-key"
+                        className="text-sm font-medium"
+                      >
+                        Google API Key
+                      </label>
+                      <Input
+                        id="gemini-api-key"
+                        type="password"
+                        value={googleApiKey}
+                        placeholder="AIza..."
+                        autoComplete="off"
+                        onChange={(event) =>
+                          setGoogleApiKey(event.target.value.trim())
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="gemini-model"
+                        className="text-sm font-medium"
+                      >
+                        Model
+                      </label>
+                      <Input
+                        id="gemini-model"
+                        value={googleModel}
+                        onChange={(event) =>
+                          setGoogleModel(event.target.value.trim())
+                        }
+                        placeholder="gemini-1.5-pro-latest"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Recommended: <code>gemini-1.5-pro-latest</code>.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </SheetContent>
         </Sheet>
