@@ -8,7 +8,6 @@ import { useTheme } from '@/components/theme-provider';
 import {
   Github,
   Network,
-  Bot,
   Settings as SettingsIcon,
   Moon,
   Sun,
@@ -47,7 +46,6 @@ export function Settings({
   const [anon, setAnon] = useState(supabaseApiKey.anon);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
-  const [isAINew, setIsAINew] = useLocalStorage('is-ai-new', true);
   const [, setDefinitions] = useLocalStorage<any>('definitions', {});
   const { setTheme, isDark } = useTheme();
 
@@ -109,10 +107,6 @@ export function Settings({
     }
   };
 
-  useEffect(() => {
-    if (pathname === '/ai') setIsAINew(false);
-  }, [pathname, setIsAINew]);
-
   const isToolbarVariant = variant === 'toolbar';
 
   const containerClasses = cn(
@@ -136,24 +130,6 @@ export function Settings({
           }
         >
           <Network size={20} />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          title="AI"
-          onClick={() => router.push('/ai')}
-          className={`relative ${
-            pathname === '/ai' ? 'bg-primary text-primary-foreground' : ''
-          }`}
-        >
-          <Bot size={20} />
-          {isAINew && (
-            <>
-              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1 animate-ping" />
-              <div className="w-3 h-3 rounded-full bg-blue-500 absolute -top-1 -right-1" />
-            </>
-          )}
         </Button>
 
         <Sheet open={open} onOpenChange={setOpen}>
