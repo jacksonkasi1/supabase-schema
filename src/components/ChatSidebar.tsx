@@ -68,7 +68,7 @@ export function ChatSidebar({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Create transport with configuration (updates when tables change)
+  // Create transport with configuration (without schema - it's passed per message)
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -77,10 +77,10 @@ export function ChatSidebar({
           provider: aiProvider === 'google' ? 'google' : 'openai',
           apiKey: aiProvider === 'google' ? googleApiKey : openaiApiKey,
           model: aiProvider === 'google' ? googleModel : openaiModel,
-          schema: tables, // This will update when tables change
+          // schema is NOT included here - it's passed per message to avoid stale state
         },
       }),
-    [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel, tables]
+    [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel]
   );
 
   // Log schema sent to API for debugging
@@ -247,10 +247,12 @@ export function ChatSidebar({
     if (!input.trim()) return;
 
     // Send the message using AI SDK 5 pattern
+    // IMPORTANT: Pass schema here to ensure we use the current state, not stale cached state
     await sendMessage(
       { text: input },
       {
         body: {
+          schema: tables, // Use current tables state at send time, not transport creation time
           attachments: selectedFiles.map((file) => ({
             name: file.name,
             type: file.type,
