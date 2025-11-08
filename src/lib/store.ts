@@ -156,6 +156,12 @@ export const useStore = create<AppState>((set, get) => ({
         colGroup.push(col);
       });
 
+      // Extract schema from key if present (e.g., "public.users" -> "public")
+      // Keys with schema are in format "schema.tablename"
+      const keyParts = key.split('.');
+      const schema = keyParts.length > 1 ? keyParts[0] : 'public';
+      const tableName = keyParts.length > 1 ? keyParts.slice(1).join('.') : key;
+
       // Preserve existing position if table already exists
       tableGroup[key] = {
         title: key,
@@ -164,6 +170,7 @@ export const useStore = create<AppState>((set, get) => ({
         position: currentTables[key]
           ? currentTables[key].position
           : { x: 0, y: 0 },
+        schema: schema, // Extract and set schema from key
       };
     }
 
