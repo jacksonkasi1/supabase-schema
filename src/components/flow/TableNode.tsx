@@ -15,20 +15,18 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
     <div
       className={cn(
         'rounded-md overflow-hidden',
-        'bg-warm-gray-100 dark:bg-dark-700',
-        'backdrop-blur-sm',
+        'bg-white dark:bg-dark-700',
         'border-2 dark:border-dark-border transition-colors',
         'shadow-md',
         selected && 'border-green-500 ring-2 ring-green-500/20'
       )}
       style={{
         minWidth: '200px',
-        backgroundColor: 'var(--tw-bg-opacity, 1)',
       }}
     >
       {/* Table Header */}
       <div 
-        className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
+        className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-gray-50 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
         style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
       >
         {tableData.is_view && (
@@ -78,7 +76,7 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
                 className={cn(
                   'py-1 px-4 flex items-center text-dark-100 dark:text-white-800',
                   'border-l-3 border-transparent',
-                  'hover:bg-warm-gray-200 dark:hover:bg-dark-600 dark:hover:text-white',
+                  'hover:bg-gray-50 dark:hover:bg-dark-600 dark:hover:text-white',
                   col.pk && 'border-green-500'
                 )}
               >

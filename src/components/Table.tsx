@@ -85,7 +85,7 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
     <>
       <div
         id={table.title}
-        className="selectable pb-2 absolute z-20 box rounded-md overflow-hidden bg-warm-gray-100 dark:bg-dark-700 border-2 dark:border-dark-border !hover:border-green-500"
+        className="selectable pb-2 absolute z-20 box rounded-md overflow-hidden bg-white dark:bg-dark-700 border-2 dark:border-dark-border !hover:border-green-500"
         style={{
           top: `${position.y}px`,
           left: `${position.x}px`,
@@ -96,7 +96,7 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
         onMouseLeave={() => setIsHover(false)}
       >
         <h5 
-          className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
+          className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-gray-50 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
           style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
         >
           {table.is_view && (
@@ -107,7 +107,7 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
         {table.columns?.map((col) => (
           <div key={col.title}>
             <div
-              className={`py-1 px-4 flex items-center text-dark-100 dark:text-white-800 border-l-3 border-transparent hover:bg-warm-gray-200 dark:hover:bg-dark-600 dark:hover:text-white ${
+              className={`py-1 px-4 flex items-center text-dark-100 dark:text-white-800 border-l-3 border-transparent hover:bg-gray-50 dark:hover:bg-dark-600 dark:hover:text-white ${
                 col.pk ? 'border-green-500' : ''
               }`}
               id={`${table.title}.${col.title}`}
