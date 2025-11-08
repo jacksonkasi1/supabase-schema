@@ -159,10 +159,13 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Extract schema from key if present (e.g., "public.users" -> "public")
       // Keys with schema are in format "schema.tablename"
+      // If no schema is present, don't default to 'public' - use undefined instead
       const keyParts = key.split('.');
-      const schema = keyParts.length > 1 ? keyParts[0] : 'public';
-      const tableName = keyParts.length > 1 ? keyParts.slice(1).join('.') : key;
-      newSchemas.add(schema);
+      const schema = keyParts.length > 1 ? keyParts[0] : undefined;
+      // Only add to schemas set if schema is actually present
+      if (schema) {
+        newSchemas.add(schema);
+      }
 
       // Preserve existing position if table already exists
       tableGroup[key] = {

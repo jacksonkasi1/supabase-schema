@@ -118,6 +118,7 @@ export function centerNodes(
 /**
  * Apply layout with schema grouping
  * Groups nodes by schema and lays out each group separately
+ * Only groups nodes that have an explicit schema defined
  */
 export function getLayoutedNodesWithSchemas(
   nodes: FlowNode[],
@@ -126,15 +127,33 @@ export function getLayoutedNodesWithSchemas(
 ): FlowNode[] {
   const layoutOptions = { ...DEFAULT_OPTIONS, ...options };
 
-  // Group nodes by schema
+  // Separate nodes with schemas from nodes without schemas
   const schemaGroups: Record<string, FlowNode[]> = {};
+  const noSchemaNodes: FlowNode[] = [];
+  
   nodes.forEach((node) => {
-    const schema = (node.data as any).schema || 'public';
-    if (!schemaGroups[schema]) {
-      schemaGroups[schema] = [];
+    const schema = (node.data as any).schema;
+    if (schema) {
+      // Only group if schema is explicitly present
+      if (!schemaGroups[schema]) {
+        schemaGroups[schema] = [];
+      }
+      schemaGroups[schema].push(node);
+    } else {
+      // Nodes without schemas go into a separate group
+      noSchemaNodes.push(node);
     }
-    schemaGroups[schema].push(node);
   });
+
+  // Layout nodes without schemas first (if any)
+  let noSchemaLayouted: FlowNode[] = [];
+  if (noSchemaNodes.length > 0) {
+    const noSchemaNodeIds = new Set(noSchemaNodes.map((n) => n.id));
+    const noSchemaEdges = edges.filter(
+      (edge) => noSchemaNodeIds.has(edge.source) && noSchemaNodeIds.has(edge.target)
+    );
+    noSchemaLayouted = getLayoutedNodes(noSchemaNodes, noSchemaEdges, layoutOptions);
+  }
 
   // Layout each schema group separately
   const layoutedGroups: Record<string, FlowNode[]> = {};
@@ -162,6 +181,14 @@ export function getLayoutedNodesWithSchemas(
 
   const finalLayoutedNodes: FlowNode[] = [];
 
+  // Add nodes without schemas first (no grouping)
+  if (noSchemaLayouted.length > 0) {
+    finalLayoutedNodes.push(...noSchemaLayouted);
+    const noSchemaBounds = getNodesBounds(noSchemaLayouted);
+    currentX = noSchemaBounds.width + schemaSpacing;
+  }
+
+  // Then add schema groups
   Object.entries(layoutedGroups).forEach(([schema, schemaNodes]) => {
     // Offset all nodes in this group
     const offsetNodes = schemaNodes.map((node) => ({

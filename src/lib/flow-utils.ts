@@ -17,7 +17,7 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
         title: table.title,
         columns: table.columns || [],
         is_view: table.is_view,
-        schema: table.schema || 'public', // Include schema in node data
+        schema: table.schema, // Include schema in node data (undefined if no schema)
       },
     };
   });
@@ -44,18 +44,21 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
           return;
         }
 
-        let targetSchema = table.schema || 'public';
+        // Default to source table's schema if FK doesn't specify schema
+        let targetSchema = table.schema;
         let targetTableName: string;
         const targetColumn = fkParts.pop()!;
 
         if (fkParts.length === 1) {
           targetTableName = fkParts[0];
+          // If FK doesn't specify schema, use source table's schema (could be undefined)
         } else {
           targetSchema = fkParts.shift() || targetSchema;
           targetTableName = fkParts.join('.');
         }
 
-        const targetTableKey = `${targetSchema}.${targetTableName}`;
+        // Build target table key - only include schema if present
+        const targetTableKey = targetSchema ? `${targetSchema}.${targetTableName}` : targetTableName;
 
         const edgeId = `${table.title}.${column.title}-${targetTableKey}.${targetColumn}`;
 
@@ -198,16 +201,19 @@ export function getConnectedEdges(
 
 /**
  * Group tables by schema
+ * Only groups tables that have an explicit schema defined
  */
 export function groupTablesBySchema(tables: TableState): Record<string, string[]> {
   const groups: Record<string, string[]> = {};
 
   Object.values(tables).forEach((table) => {
-    const schema = table.schema || 'public'; // Default to 'public'
-    if (!groups[schema]) {
-      groups[schema] = [];
+    // Only group if schema is explicitly present
+    if (table.schema) {
+      if (!groups[table.schema]) {
+        groups[table.schema] = [];
+      }
+      groups[table.schema].push(table.title);
     }
-    groups[schema].push(table.title);
   });
 
   return groups;
@@ -215,12 +221,16 @@ export function groupTablesBySchema(tables: TableState): Record<string, string[]
 
 /**
  * Get all unique schemas from tables
+ * Only returns schemas that are explicitly defined
  */
 export function getAllSchemas(tables: TableState): string[] {
   const schemas = new Set<string>();
 
   Object.values(tables).forEach((table) => {
-    schemas.add(table.schema || 'public');
+    // Only add schema if it's explicitly present
+    if (table.schema) {
+      schemas.add(table.schema);
+    }
   });
 
   return Array.from(schemas).sort();
@@ -235,8 +245,9 @@ export function calculateSchemaBoundingBox(
   padding: number = 40
 ): { x: number; y: number; width: number; height: number } | null {
   // Get all tables in this schema
+  // Only match tables that have this schema explicitly defined
   const schemaTables = Object.values(tables).filter(
-    (table) => (table.schema || 'public') === schemaName
+    (table) => table.schema === schemaName
   );
 
   if (schemaTables.length === 0) {

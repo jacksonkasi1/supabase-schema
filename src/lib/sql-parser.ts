@@ -35,17 +35,18 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
       );
 
       if (createTableMatch) {
-        const schemaName = createTableMatch[1] || 'public';
+        const schemaName = createTableMatch[1]; // undefined if no schema specified
         const tableName = createTableMatch[2];
         const columns = parseColumns(statement);
 
-        const uniqueKey = `${schemaName}.${tableName}`;
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
         tables[uniqueKey] = {
           title: tableName,
           is_view: false,
           columns: columns,
           position: { x: 0, y: 0 },
-          schema: schemaName
+          schema: schemaName // undefined if no schema specified
         };
       }
 
@@ -55,16 +56,17 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
       );
 
       if (createViewMatch) {
-        const schemaName = createViewMatch[1] || 'public';
+        const schemaName = createViewMatch[1]; // undefined if no schema specified
         const viewName = createViewMatch[2];
 
-        const uniqueKey = `${schemaName}.${viewName}`;
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${viewName}` : viewName;
         tables[uniqueKey] = {
           title: viewName,
           is_view: true,
           columns: [],
           position: { x: 0, y: 0 },
-          schema: schemaName
+          schema: schemaName // undefined if no schema specified
         };
       }
     }
@@ -89,9 +91,10 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
       const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
 
       if (alterTableMatch) {
-        const schemaName = alterTableMatch[1] || 'public';
+        const schemaName = alterTableMatch[1]; // undefined if no schema specified
         const tableName = alterTableMatch[2];
-        const uniqueKey = `${schemaName}.${tableName}`;
+        // Only include schema in key if schema is explicitly specified
+        const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
 
         parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
         parsePrimaryKeysFromAlter(tables, uniqueKey, trimmed);
@@ -128,18 +131,19 @@ export function parseSQLSchema(sql: string): TableState {
 
     if (createTableMatch) {
       // Extract schema and table name
-      const schemaName = createTableMatch[1] || 'public'; // Default to 'public' if no schema specified
+      const schemaName = createTableMatch[1]; // undefined if no schema specified
       const tableName = createTableMatch[2]; // Always use the actual table name, not schema
       const columns = parseColumns(statement);
 
-      // Use schema-qualified key to avoid name collisions (e.g., public.users vs auth.users)
-      const uniqueKey = `${schemaName}.${tableName}`;
+      // Only include schema in key if schema is explicitly specified
+      // This avoids adding 'public.' prefix when no schema is mentioned
+      const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
       tables[uniqueKey] = {
         title: tableName,
         is_view: false,
         columns: columns,
         position: { x: 0, y: 0 },
-        schema: schemaName
+        schema: schemaName // undefined if no schema specified
       };
     }
 
@@ -150,17 +154,17 @@ export function parseSQLSchema(sql: string): TableState {
     );
 
     if (createViewMatch) {
-      const schemaName = createViewMatch[1] || 'public'; // Default to 'public' if no schema specified
+      const schemaName = createViewMatch[1]; // undefined if no schema specified
       const viewName = createViewMatch[2]; // Use actual view name, not schema
 
-      // Use schema-qualified key
-      const uniqueKey = `${schemaName}.${viewName}`;
+      // Only include schema in key if schema is explicitly specified
+      const uniqueKey = schemaName ? `${schemaName}.${viewName}` : viewName;
       tables[uniqueKey] = {
         title: viewName,
         is_view: true,
         columns: [],
         position: { x: 0, y: 0 },
-        schema: schemaName
+        schema: schemaName // undefined if no schema specified
       };
     }
   }
@@ -173,11 +177,11 @@ export function parseSQLSchema(sql: string): TableState {
     const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
 
     if (alterTableMatch) {
-      const schemaName = alterTableMatch[1] || 'public'; // Extract schema or default to 'public'
+      const schemaName = alterTableMatch[1]; // undefined if no schema specified
       const tableName = alterTableMatch[2]; // Use the table name, ignore schema prefix
 
-      // Build schema-qualified key for lookup
-      const uniqueKey = `${schemaName}.${tableName}`;
+      // Only include schema in key if schema is explicitly specified
+      const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
 
       // Parse foreign keys
       parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
