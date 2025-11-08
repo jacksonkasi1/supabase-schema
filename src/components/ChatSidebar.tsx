@@ -246,16 +246,18 @@ export function ChatSidebar({
 
     if (!input.trim()) return;
 
-    // Send the message using AI SDK 5 pattern
-    // IMPORTANT: Pass schema here to ensure we use the current state, not stale cached state
-    const schemaTableCount = Object.keys(tables).length;
-    console.log(`[ChatSidebar] 📤 Sending message with ${schemaTableCount} tables in schema`);
+    // CRITICAL: Read FRESH state from Zustand, not closure-captured value
+    // Similar to Cline's pattern: "messages = await this.contextManager.getMessages()"
+    // This ensures we always send current state, even if React hasn't re-rendered yet
+    const currentTables = useStore.getState().tables;
+    const schemaTableCount = Object.keys(currentTables).length;
+    console.log(`[ChatSidebar] 📤 Sending message with ${schemaTableCount} tables in schema (fresh read)`);
 
     await sendMessage(
       { text: input },
       {
         body: {
-          schema: tables, // Use current tables state at send time, not transport creation time
+          schema: currentTables, // ✅ Fresh state from store, not stale closure
           attachments: selectedFiles.map((file) => ({
             name: file.name,
             type: file.type,
