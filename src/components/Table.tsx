@@ -6,6 +6,7 @@ import { Table as TableType } from '@/lib/types';
 import { Connector } from './Connector';
 import { createPortal } from 'react-dom';
 import { Newspaper } from 'lucide-react';
+import { getTableHeaderColor } from '@/lib/utils';
 
 interface TableProps {
   table: TableType;
@@ -22,6 +23,7 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
   const tablesSelectedRef = useRef<any>({});
 
   const position = tables[table.title]?.position || { x: 0, y: 0 };
+  const headerColor = getTableHeaderColor(table.title);
 
   const dragStart = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only left click
@@ -93,7 +95,10 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
         onMouseEnter={() => setIsHover(true)}
         onMouseLeave={() => setIsHover(false)}
       >
-        <h5 className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border">
+        <h5 
+          className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
+          style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
+        >
           {table.is_view && (
             <Newspaper className="inline mb-1px mr-2" size={20} />
           )}

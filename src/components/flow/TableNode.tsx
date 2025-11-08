@@ -3,12 +3,13 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Newspaper } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getTableHeaderColor } from '@/lib/utils';
 import { TableNodeData } from '@/types/flow';
 
 function TableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
   const tableName = id; // Node ID is the table name
+  const headerColor = getTableHeaderColor(tableName);
 
   return (
     <div
@@ -26,7 +27,10 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
       }}
     >
       {/* Table Header */}
-      <div className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border">
+      <div 
+        className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-warm-gray-200 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
+        style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
+      >
         {tableData.is_view && (
           <Newspaper className="inline mb-1px mr-2" size={20} />
         )}
