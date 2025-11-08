@@ -24,7 +24,7 @@ import {
   createNodeContextMenu,
   createEdgeContextMenu,
 } from './ContextMenu';
-import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
+import { tablesToNodes, tablesToEdges, getAllSchemas } from '@/lib/flow-utils';
 import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
@@ -115,14 +115,18 @@ function FlowCanvasInner() {
       });
 
       // Filter tables by visible schemas
-      // If no schemas are visible (size === 0), show all tables
-      // Otherwise, only show tables with schemas that are in visibleSchemas
-      // Tables without schemas are always shown (they're not grouped)
+      // Check if any schemas exist in the database
+      const allSchemas = getAllSchemas(tables);
+      const hasSchemas = allSchemas.length > 0;
+      
       const filteredTables = Object.entries(tables).reduce(
         (acc, [key, table]) => {
-          if (visibleSchemas.size === 0) {
-            // Show all tables when no schema filter is active
+          if (!hasSchemas) {
+            // No schemas exist - show all tables (default state)
             acc[key] = table;
+          } else if (visibleSchemas.size === 0) {
+            // Schemas exist but user hid all of them - hide everything
+            // Don't add table to acc
           } else {
             // Only show tables that have a schema in visibleSchemas, or tables without schemas
             if (!table.schema || visibleSchemas.has(table.schema)) {
