@@ -152,10 +152,17 @@ export function ModalTypes({ open, onClose }: ModalTypesProps) {
         if (!column.required) code += '?';
         code += ': ';
 
-        code += referenceTable[column.format] || 'any // type unknown';
+        // Handle enum types
+        if (column.format === 'enum' && column.enumValues && column.enumValues.length > 0) {
+          const enumValues = column.enumValues.map(v => `'${v}'`).join(' | ');
+          code += enumValues;
+        } else {
+          code += referenceTable[column.format] || 'any // type unknown';
+        }
 
         if (column.pk) code += '   /* primary key */';
         if (column.fk) code += `   /* foreign key to ${column.fk} */`;
+        if (column.enumTypeName) code += `   /* enum: ${column.enumTypeName} */`;
         code += `;\n`;
       });
 

@@ -233,6 +233,8 @@ export const useStore = create<AppState>((set, get) => {
           required: tableValue.required?.includes(colKey) || false,
           pk: colVal.description?.includes('<pk/>') || false,
           fk: colVal.description ? colVal.description.split('`')[1] : undefined,
+          enumTypeName: colVal.enumTypeName,
+          enumValues: colVal.enumValues,
         };
         colGroup.push(col);
       });

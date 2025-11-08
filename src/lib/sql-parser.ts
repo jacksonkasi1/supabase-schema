@@ -1,6 +1,49 @@
 import { TableState, Column } from './types';
 
 /**
+ * Parse CREATE TYPE ... AS ENUM statements
+ * Returns a map of enum type names to their values
+ */
+function parseEnumTypes(statements: string[]): Map<string, string[]> {
+  const enumTypes = new Map<string, string[]>();
+
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+    
+    // Match: CREATE TYPE type_name AS ENUM ('value1', 'value2', ...)
+    // Also handle schema-qualified: CREATE TYPE schema.type_name AS ENUM (...)
+    // Handle underscores in type names (e.g., post_status, user_role)
+    const enumMatch = trimmed.match(
+      /create\s+type\s+(?:if\s+not\s+exists\s+)?(?:["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\.)?["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\s+as\s+enum\s*\(([^)]+)\)/i
+    );
+
+    if (enumMatch) {
+      const schemaName = enumMatch[1];
+      const enumTypeName = enumMatch[2];
+      const valuesString = enumMatch[3];
+
+      // Parse enum values (handle quoted strings)
+      const values: string[] = [];
+      const valueRegex = /'([^']+)'|"([^"]+)"/g;
+      let match;
+      while ((match = valueRegex.exec(valuesString)) !== null) {
+        values.push(match[1] || match[2]);
+      }
+
+      // Store with schema prefix if present
+      const fullEnumName = schemaName ? `${schemaName}.${enumTypeName}` : enumTypeName;
+      if (values.length > 0) {
+        enumTypes.set(fullEnumName, values);
+        // Also store without schema for easier lookup
+        enumTypes.set(enumTypeName, values);
+      }
+    }
+  }
+
+  return enumTypes;
+}
+
+/**
  * Parse SQL schema asynchronously (non-blocking for large files)
  * Breaks up work into chunks to keep UI responsive
  */
@@ -16,10 +59,14 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
 
   console.log(`[SQL Parser] Processing ${statements.length} statements...`);
 
+  // First pass: Parse enum types
+  const enumTypes = parseEnumTypes(statements);
+  console.log(`[SQL Parser] Found ${enumTypes.size} enum types`);
+
   // Process in batches to avoid blocking
   const BATCH_SIZE = 10;
 
-  // First pass: CREATE TABLE/VIEW (in batches)
+  // Second pass: CREATE TABLE/VIEW (in batches)
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
     const batch = statements.slice(i, i + BATCH_SIZE);
 
@@ -37,7 +84,7 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
       if (createTableMatch) {
         const schemaName = createTableMatch[1]; // undefined if no schema specified
         const tableName = createTableMatch[2];
-        const columns = parseColumns(statement);
+        const columns = parseColumns(statement, enumTypes);
 
         // Only include schema in key if schema is explicitly specified
         const uniqueKey = schemaName ? `${schemaName}.${tableName}` : tableName;
@@ -120,6 +167,9 @@ export function parseSQLSchema(sql: string): TableState {
   // Split into individual statements
   const statements = cleanedSQL.split(';').filter(s => s.trim());
 
+  // First pass: Parse enum types
+  const enumTypes = parseEnumTypes(statements);
+
   for (const statement of statements) {
     const trimmed = statement.trim();
 
@@ -133,7 +183,7 @@ export function parseSQLSchema(sql: string): TableState {
       // Extract schema and table name
       const schemaName = createTableMatch[1]; // undefined if no schema specified
       const tableName = createTableMatch[2]; // Always use the actual table name, not schema
-      const columns = parseColumns(statement);
+      const columns = parseColumns(statement, enumTypes);
 
       // Only include schema in key if schema is explicitly specified
       // This avoids adding 'public.' prefix when no schema is mentioned
@@ -197,7 +247,7 @@ export function parseSQLSchema(sql: string): TableState {
 /**
  * Parse columns from CREATE TABLE statement
  */
-function parseColumns(createStatement: string): Column[] {
+function parseColumns(createStatement: string, enumTypes: Map<string, string[]> = new Map()): Column[] {
   const columns: Column[] = [];
 
   // Extract the content between parentheses
@@ -223,7 +273,7 @@ function parseColumns(createStatement: string): Column[] {
       continue;
     }
 
-    const column = parseColumnDefinition(trimmed);
+    const column = parseColumnDefinition(trimmed, enumTypes);
     if (column) {
       columns.push(column);
     }
@@ -235,7 +285,7 @@ function parseColumns(createStatement: string): Column[] {
 /**
  * Parse a single column definition
  */
-function parseColumnDefinition(def: string): Column | null {
+function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = new Map()): Column | null {
   // Extract column name (supporting quoted identifiers with spaces/special chars)
   // Matches: "column name", 'column name', or unquoted_column_name
   const nameMatch = def.match(
@@ -254,11 +304,72 @@ function parseColumnDefinition(def: string): Column | null {
 
   const rest = nameMatch[5];
 
-  // Extract data type
-  const typeMatch = rest.match(/^(\w+)(?:\s*\([\d,\s]+\))?/i);
-  if (!typeMatch) return null;
+  // Extract data type - handle enum types (may be schema-qualified)
+  // PostgreSQL enum columns are defined as: column_name enum_type_name
+  // Or: column_name schema.enum_type_name
+  let dataType: string;
+  let enumTypeName: string | undefined;
+  let enumValues: string[] | undefined = undefined;
 
-  const dataType = typeMatch[0].trim();
+  // Extract data type - handle enum types and regular types
+  // First check if it's a schema-qualified type (schema.type)
+  const schemaQualifiedMatch = rest.match(/^["']?(\w+)["']?\.["']?(\w+)["']?/i);
+  
+  if (schemaQualifiedMatch) {
+    const schemaName = schemaQualifiedMatch[1];
+    const typeName = schemaQualifiedMatch[2];
+    const fullTypeName = `${schemaName}.${typeName}`;
+    
+    // Check if this matches an enum type
+    if (enumTypes.has(fullTypeName)) {
+      dataType = 'enum';
+      enumTypeName = fullTypeName;
+      enumValues = enumTypes.get(fullTypeName);
+    } else if (enumTypes.has(typeName)) {
+      dataType = 'enum';
+      enumTypeName = typeName;
+      enumValues = enumTypes.get(typeName);
+    } else {
+      dataType = fullTypeName;
+    }
+  } else {
+    // Single type name (no schema) - extract type name up to constraints
+    // Match type name (can include underscores) - stop at DEFAULT, NOT NULL, etc.
+    // First, try to extract just the type name before any constraints
+    const typeNameMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(?:DEFAULT|NOT|NULL|PRIMARY|UNIQUE|CHECK|REFERENCES|CONSTRAINT)|$)/i);
+    
+    if (typeNameMatch) {
+      const extractedType = typeNameMatch[1];
+      
+      // Check if it's an enum type
+      if (enumTypes.has(extractedType)) {
+        dataType = 'enum';
+        enumTypeName = extractedType;
+        enumValues = enumTypes.get(extractedType);
+      } else {
+        // Regular type - extract with possible size constraints like varchar(255)
+        const fullTypeMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?/i);
+        if (!fullTypeMatch) return null;
+        dataType = fullTypeMatch[0].trim();
+      }
+    } else {
+      // Fallback: try simple word match
+      const simpleMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/i);
+      if (!simpleMatch) return null;
+      
+      const extractedType = simpleMatch[1];
+      if (enumTypes.has(extractedType)) {
+        dataType = 'enum';
+        enumTypeName = extractedType;
+        enumValues = enumTypes.get(extractedType);
+      } else {
+        // Regular type
+        const fullTypeMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?/i);
+        if (!fullTypeMatch) return null;
+        dataType = fullTypeMatch[0].trim();
+      }
+    }
+  }
 
   // Check for constraints
   const isPrimaryKey = /primary\s+key/i.test(rest);
@@ -289,16 +400,18 @@ function parseColumnDefinition(def: string): Column | null {
   }
 
   // Map PostgreSQL types to format
-  const format = mapPostgreSQLType(dataType);
+  const format = enumTypeName ? 'enum' : mapPostgreSQLType(dataType);
 
   return {
     title: columnName,
     format: format,
-    type: determineType(format),
+    type: enumTypeName ? 'enum' : determineType(format),
     default: defaultValue,
     required: isNotNull || isPrimaryKey,
     pk: isPrimaryKey,
-    fk: foreignKey
+    fk: foreignKey,
+    enumTypeName: enumTypeName,
+    enumValues: enumValues
   };
 }
 
@@ -423,6 +536,9 @@ function mapPostgreSQLType(pgType: string): string {
   // Array types
   if (type.includes('[]')) return type;
 
+  // Enum types (should be handled before this point, but fallback)
+  if (type === 'enum') return 'enum';
+
   // Default: return as-is
   return type;
 }
@@ -432,6 +548,11 @@ function mapPostgreSQLType(pgType: string): string {
  */
 function determineType(format: string): string {
   const f = format.toLowerCase();
+
+  // Enum types
+  if (f === 'enum') {
+    return 'enum';
+  }
 
   // Numeric types
   if (f.includes('int') || f.includes('serial') || f === 'numeric' || f.includes('float')) {

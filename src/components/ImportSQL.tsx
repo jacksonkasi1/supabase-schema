@@ -197,6 +197,8 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             type: col.type,
             format: col.format,
             default: col.default,
+            enumTypeName: col.enumTypeName,
+            enumValues: col.enumValues,
             description: col.pk
               ? '<pk/>'
               : col.fk

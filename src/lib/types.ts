@@ -6,6 +6,9 @@ export interface Column {
   required?: boolean;
   pk?: boolean;
   fk?: string | undefined;
+  enumValues?: string[]; // Values for enum types
+  enumTypeName?: string; // Name of the enum type (e.g., "user_status")
+  comment?: string; // Comment/note for the column
 }
 
 export interface Position {

@@ -1,4 +1,4 @@
-import { TableState } from './types';
+import { TableState, Column } from './types';
 
 /**
  * Generate PostgreSQL SQL schema from tables
@@ -23,6 +23,32 @@ export function generateSQLSchema(tables: TableState): string {
     'user',
     'view',
   ];
+
+  // Collect all enum types from columns
+  const enumTypes = new Map<string, string[]>();
+  Object.values(tables).forEach((table) => {
+    table.columns?.forEach((col) => {
+      if (col.enumTypeName && col.enumValues && col.enumValues.length > 0) {
+        enumTypes.set(col.enumTypeName, col.enumValues);
+      }
+    });
+  });
+
+  // Generate CREATE TYPE statements for enums (before tables)
+  if (enumTypes.size > 0) {
+    sql += '-- Enum Types\n';
+    enumTypes.forEach((values, typeName) => {
+      // Handle schema-qualified enum names
+      const parts = typeName.split('.');
+      const enumName = parts.length > 1 ? parts[1] : typeName;
+      const schemaPrefix = parts.length > 1 ? `${parts[0]}.` : '';
+      
+      sql += `CREATE TYPE ${schemaPrefix}"${enumName}" AS ENUM (`;
+      sql += values.map(v => `'${v}'`).join(', ');
+      sql += `);\n`;
+    });
+    sql += '\n';
+  }
 
   // Build dependency graph to order tables correctly
   const dependencies: Record<string, string[]> = {};
@@ -86,6 +112,12 @@ export function generateSQLSchema(tables: TableState): string {
       // Data type
       if (col.format === 'integer' && col.pk) {
         sql += ` SERIAL`;
+      } else if (col.format === 'enum' && col.enumTypeName) {
+        // Use the enum type name for enum columns
+        const enumTypeParts = col.enumTypeName.split('.');
+        const enumName = enumTypeParts.length > 1 ? enumTypeParts[1] : col.enumTypeName;
+        const schemaPrefix = enumTypeParts.length > 1 ? `${enumTypeParts[0]}.` : '';
+        sql += ` ${schemaPrefix}"${enumName}"`;
       } else {
         sql += ` ${col.format.toUpperCase()}`;
       }
