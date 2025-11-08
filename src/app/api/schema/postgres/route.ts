@@ -188,7 +188,7 @@ export async function POST(req: Request) {
     );
 
     const pkMap = new Map<string, Set<string>>();
-    pkResult.rows.forEach((row) => {
+    pkResult.rows.forEach((row: PrimaryKeyRow) => {
       const key = toDefinitionKey(row.schema, row.table_name);
       if (!pkMap.has(key)) {
         pkMap.set(key, new Set());
@@ -200,7 +200,7 @@ export async function POST(req: Request) {
       string,
       Array<{ refSchema: string; refTable: string; refColumn: string }>
     >();
-    fkResult.rows.forEach((row) => {
+    fkResult.rows.forEach((row: ForeignKeyRow) => {
       const key = `${toDefinitionKey(row.schema, row.table_name)}.${row.column_name}`;
       if (!fkMap.has(key)) {
         fkMap.set(key, []);
@@ -222,7 +222,7 @@ export async function POST(req: Request) {
       }>
     >();
 
-    columnsResult.rows.forEach((row) => {
+    columnsResult.rows.forEach((row: ColumnRow) => {
       const key = toDefinitionKey(row.schema, row.table_name);
       if (!groupedColumns.has(key)) {
         groupedColumns.set(key, []);
@@ -238,7 +238,7 @@ export async function POST(req: Request) {
     const definitions: Record<string, any> = {};
     const paths: Record<string, any> = {};
 
-    tablesResult.rows.forEach((table) => {
+    tablesResult.rows.forEach((table: TableRow) => {
       if (EXCLUDED_SCHEMAS.has(table.schema)) {
         return;
       }
