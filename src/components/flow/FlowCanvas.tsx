@@ -506,7 +506,9 @@ function FlowCanvasInner() {
   // Handle multiple nodes drag
   const onNodesDelete = useCallback((deleted: any[]) => {
     console.log('Nodes deleted:', deleted);
-  }, []);
+    // Sync deletion with store to prevent recreation
+    deleted.forEach((node) => deleteTable(node.id));
+  }, [deleteTable]);
 
   const onConnect = useCallback(
     (params: Connection) => {
