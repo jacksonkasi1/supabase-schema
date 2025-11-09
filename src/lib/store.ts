@@ -500,7 +500,37 @@ export const useStore = create<AppState>((set, get) => {
     try {
       const tablesData = localStorage.getItem('table-list');
       if (tablesData) {
-        set({ tables: JSON.parse(tablesData) });
+        const loadedTables = JSON.parse(tablesData);
+
+        // Clean up dummy tables (tables without title or columns)
+        const cleanedTables: TableState = {};
+        let removedCount = 0;
+
+        Object.entries(loadedTables).forEach(([key, table]: [string, any]) => {
+          // Skip tables without valid title
+          if (!key || key.trim() === '') {
+            console.warn(`[initializeFromLocalStorage] Removing table with empty key`);
+            removedCount++;
+            return;
+          }
+
+          // Skip tables without columns
+          if (!table.columns || !Array.isArray(table.columns) || table.columns.length === 0) {
+            console.warn(`[initializeFromLocalStorage] Removing dummy table "${key}" - no columns`);
+            removedCount++;
+            return;
+          }
+
+          cleanedTables[key] = table;
+        });
+
+        if (removedCount > 0) {
+          console.log(`[initializeFromLocalStorage] Cleaned up ${removedCount} dummy table(s)`);
+          // Save cleaned tables back to localStorage
+          localStorage.setItem('table-list', JSON.stringify(cleanedTables));
+        }
+
+        set({ tables: cleanedTables });
       }
 
       const viewData = localStorage.getItem('view');
