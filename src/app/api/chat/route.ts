@@ -1,4 +1,4 @@
-import { streamText, tool, convertToModelMessages } from 'ai';
+import { streamText, tool, convertToModelMessages, stepCountIs } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
@@ -593,9 +593,9 @@ export async function POST(req: Request) {
       temperature: 0.7,
       tools,
       // Enable autonomous multi-step tool calling (like Cline's agentic loop)
-      maxSteps: 20, // AI can make up to 20 autonomous tool calls
-      onStepFinish: ({ stepType, toolCalls, toolResults, finishReason, text }) => {
-        console.log(`[Step ${stepType}] Tool calls: ${toolCalls?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`);
+      stopWhen: stepCountIs(20), // AI can make up to 20 autonomous tool calls
+      onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
+        console.log(`[Step] Tool calls: ${toolCalls?.length || 0}, Results: ${toolResults?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`);
         if (toolCalls) {
           toolCalls.forEach((call, i) => {
             console.log(`  Tool ${i + 1}: ${call.toolName}`);

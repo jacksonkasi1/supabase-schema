@@ -26,7 +26,7 @@ import {
 } from './ContextMenu';
 import { tablesToNodes, tablesToEdges, getAllSchemas } from '@/lib/flow-utils';
 import { getLayoutedNodesWithSchemas } from '@/lib/layout';
-import { RelationshipType } from '@/types/flow';
+import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
 
@@ -146,7 +146,7 @@ function FlowCanvasInner() {
         id: node.id || `node-${index}`, // Fallback ID if missing
       }));
 
-      const flowEdges = tablesToEdges(filteredTables).map((edge, index) => {
+      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables).map((edge, index) => {
         const relationshipType = getEdgeRelationship(edge.id);
 
         const markerEnd = {
@@ -182,7 +182,7 @@ function FlowCanvasInner() {
             targetColumn: edge.data.targetColumn,
             relationshipType,
           },
-        };
+        } as FlowEdge;
       });
 
       console.log(
@@ -306,11 +306,11 @@ function FlowCanvasInner() {
     }
   }, [
     layoutTrigger,
-    nodes.length,
-    edges.length,
+    nodes,
+    edges,
     setNodes,
     updateTablePosition,
-  ]); // Only depend on length, not entire arrays
+  ]);
 
   // Listen for fit view trigger from store
   useEffect(() => {
