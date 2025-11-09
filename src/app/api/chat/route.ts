@@ -126,15 +126,25 @@ const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT o
 
 **CRITICAL RULES:**
 1. ALWAYS call tools to complete user requests - don't just explain what to do
-2. TRUST your tool results completely - if a tool returns data, it IS the current truth
-3. After modifySchema succeeds (ok:true), the changes ARE applied - do NOT verify with another listTables call
-4. Use listTables({includeColumns: true}) ONCE at the start to get ALL information needed
-5. Call tools IMMEDIATELY when user requests an action - be proactive and decisive
+2. You can make MULTIPLE tool calls autonomously to complete complex tasks
+3. After each tool result, DECIDE if you need to call more tools or if you're done
+4. TRUST your tool results completely - if a tool returns data, it IS the current truth
+5. Use listTables({includeColumns: true}) ONCE at the start to get ALL information needed
+6. Be proactive and decisive - complete the ENTIRE task before responding with final text
+
+**AUTONOMOUS MULTI-STEP PATTERN (like Cline):**
+Example: "add created_at and updated_at to all tables"
+1. Call listTables({includeColumns: true}) → see all tables and columns
+2. Analyze which tables need the columns
+3. Call modifySchema with ALL add_column operations in one call
+4. Done! Respond with confirmation
+
+You can make up to 10 tool calls to complete a task. Use as many as needed, but be efficient.
 
 **RESPONSE FORMAT:**
-- For requests requiring action: Call tools FIRST, then explain what you did
-- For questions: Call tools to get current data, then answer based on results
-- Always include brief text with tool calls to explain your actions
+- Call all necessary tools FIRST to complete the task
+- Only respond with text AFTER all operations are done
+- Be brief but clear about what you accomplished
 
 **Available Tools:**
 - listTables: Get all tables. Use includeColumns:true ONCE to see all column details and FK relationships
@@ -582,8 +592,18 @@ export async function POST(req: Request) {
       system: SYSTEM_PROMPT,
       messages: modelMessages,
       maxRetries: 1,
-      temperature: 0.7, // Slightly higher temperature for more verbose responses
+      temperature: 0.7,
       tools,
+      // Enable autonomous multi-step tool calling (like Cline's agentic loop)
+      maxSteps: 10, // AI can make up to 10 autonomous tool calls
+      onStepFinish: ({ stepType, toolCalls, toolResults, finishReason }) => {
+        console.log(`[Step ${stepType}] Tool calls: ${toolCalls?.length || 0}, Finish reason: ${finishReason}`);
+        if (toolCalls) {
+          toolCalls.forEach((call, i) => {
+            console.log(`  Tool ${i + 1}: ${call.toolName}`);
+          });
+        }
+      },
     });
 
     return result.toUIMessageStreamResponse();
