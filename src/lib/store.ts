@@ -222,8 +222,21 @@ export const useStore = create<AppState>((set, get) => {
     const newSchemas = new Set<string>();
 
     for (const [key, value] of Object.entries(definition)) {
-      const colGroup: Column[] = [];
+      // Skip tables without a valid title
+      if (!key || key.trim() === '') {
+        console.warn('[setTables] Skipping table with empty/invalid key');
+        continue;
+      }
+
       const tableValue = value as any;
+
+      // Skip tables without properties or with empty properties
+      if (!tableValue.properties || Object.keys(tableValue.properties).length === 0) {
+        console.warn(`[setTables] Skipping table "${key}" - no columns/properties found`);
+        continue;
+      }
+
+      const colGroup: Column[] = [];
 
       Object.keys(tableValue.properties).forEach((colKey: string) => {
         const colVal = tableValue.properties[colKey];
@@ -240,6 +253,12 @@ export const useStore = create<AppState>((set, get) => {
         };
         colGroup.push(col);
       });
+
+      // Final validation: ensure columns were actually created
+      if (colGroup.length === 0) {
+        console.warn(`[setTables] Skipping table "${key}" - no valid columns after processing`);
+        continue;
+      }
 
       // Extract schema from key if present (e.g., "public.users" -> "public")
       // Keys with schema are in format "schema.tablename"
@@ -286,8 +305,21 @@ export const useStore = create<AppState>((set, get) => {
       const discoveredSchemas = new Set<string>();
 
       for (const [tableId, tableValue] of Object.entries(updatedTables)) {
-        const existing = state.tables[tableId];
+        // Skip tables without a valid title
+        if (!tableId || tableId.trim() === '') {
+          console.warn('[updateTablesFromAI] Skipping table with empty/invalid ID');
+          continue;
+        }
+
         const columns = tableValue.columns ?? [];
+
+        // Skip tables without columns
+        if (columns.length === 0) {
+          console.warn(`[updateTablesFromAI] Skipping table "${tableId}" - no columns found`);
+          continue;
+        }
+
+        const existing = state.tables[tableId];
 
         if (tableValue.schema) {
           discoveredSchemas.add(tableValue.schema);
