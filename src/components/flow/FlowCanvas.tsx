@@ -43,6 +43,7 @@ function FlowCanvasInner() {
   const {
     tables,
     updateTablePosition,
+    deleteTable,
     getEdgeRelationship,
     setEdgeRelationship,
     layoutTrigger,
@@ -452,6 +453,9 @@ function FlowCanvasInner() {
               )
             );
 
+            // Sync deletion with store to prevent recreation
+            selectedNodeIds.forEach((nodeId) => deleteTable(nodeId));
+
             return nds.filter((node) => !node.selected);
           }
           return nds;
@@ -489,7 +493,7 @@ function FlowCanvasInner() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [setNodes, setEdges]); // Stable deps
+  }, [setNodes, setEdges, deleteTable]); // Stable deps
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
@@ -660,8 +664,10 @@ function FlowCanvasInner() {
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
       );
+      // Sync deletion with store to prevent recreation
+      deleteTable(nodeId);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, deleteTable]
   );
 
   const handleCopyNodeId = useCallback((nodeId: string) => {

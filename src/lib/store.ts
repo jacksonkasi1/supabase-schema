@@ -14,6 +14,7 @@ interface AppState {
   setTables: (definition: any, paths: any) => void;
   updateTablesFromAI: (tables: TableState) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
+  deleteTable: (tableId: string) => void;
   autoArrange: () => void;
 
   // Layout trigger for ReactFlow
@@ -323,6 +324,15 @@ export const useStore = create<AppState>((set, get) => {
         },
       },
     }));
+    get().saveToLocalStorage();
+  },
+
+  deleteTable: (tableId) => {
+    set((state) => {
+      const newTables = { ...state.tables };
+      delete newTables[tableId];
+      return { tables: newTables };
+    });
     get().saveToLocalStorage();
   },
 
