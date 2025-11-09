@@ -139,7 +139,7 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
                                       key={idx}
                                       className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono"
                                     >
-                                      '{value}'
+                                      &apos;{value}&apos;
                                     </span>
                                   ))}
                                 </div>

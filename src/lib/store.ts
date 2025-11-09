@@ -12,6 +12,7 @@ interface AppState {
   // Table state
   tables: TableState;
   setTables: (definition: any, paths: any) => void;
+  updateTablesFromAI: (tables: TableState) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
   autoArrange: () => void;
 
@@ -275,6 +276,40 @@ export const useStore = create<AppState>((set, get) => {
       set({ visibleSchemas: updatedVisibleSchemas });
     }
     
+    get().saveToLocalStorage();
+  },
+
+  updateTablesFromAI: (updatedTables) => {
+    set((state) => {
+      const nextTables: TableState = {};
+      const discoveredSchemas = new Set<string>();
+
+      for (const [tableId, tableValue] of Object.entries(updatedTables)) {
+        const existing = state.tables[tableId];
+        const columns = tableValue.columns ?? [];
+
+        if (tableValue.schema) {
+          discoveredSchemas.add(tableValue.schema);
+        }
+
+        nextTables[tableId] = {
+          ...tableValue,
+          columns,
+          position:
+            existing?.position ??
+            tableValue.position ?? { x: 0, y: 0 },
+        };
+      }
+
+      const mergedVisibleSchemas = new Set(state.visibleSchemas);
+      discoveredSchemas.forEach((schema) => mergedVisibleSchemas.add(schema));
+
+      return {
+        tables: nextTables,
+        visibleSchemas: mergedVisibleSchemas,
+      };
+    });
+
     get().saveToLocalStorage();
   },
 
