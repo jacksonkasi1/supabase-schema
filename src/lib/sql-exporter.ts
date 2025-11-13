@@ -1,4 +1,4 @@
-import { TableState, Column } from './types';
+import { TableState } from './types';
 
 /**
  * Generate PostgreSQL SQL schema from tables
