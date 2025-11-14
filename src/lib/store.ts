@@ -71,6 +71,9 @@ interface AppState {
 
   // Clear localStorage cache
   clearCache: () => void;
+
+  // Add new tables (used for copy/paste, AI updates, etc.)
+  addTables: (tables: TableState) => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -566,6 +569,31 @@ export const useStore = create<AppState>((set, get) => {
   saveToLocalStorage: () => {
     // Debounce the save operation to prevent excessive writes
     debouncedSave(performSave);
+  },
+
+  addTables: (tablesToAdd: TableState) => {
+    set((state) => {
+      const mergedTables = {
+        ...state.tables,
+        ...tablesToAdd,
+      };
+
+      const { tables: sanitizedTables } = sanitizeTables(mergedTables);
+      const updatedVisibleSchemas = new Set(state.visibleSchemas);
+
+      Object.values(tablesToAdd).forEach((table) => {
+        if (table.schema) {
+          updatedVisibleSchemas.add(table.schema);
+        }
+      });
+
+      return {
+        tables: sanitizedTables,
+        visibleSchemas: updatedVisibleSchemas,
+      };
+    });
+
+    get().saveToLocalStorage();
   },
 
   clearCache: () => {

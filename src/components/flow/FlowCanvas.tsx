@@ -29,6 +29,7 @@ import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
+import { Table, TableState } from '@/lib/types';
 
 const nodeTypes = {
   table: TableNode,
@@ -37,6 +38,85 @@ const nodeTypes = {
 
 const edgeTypes = {
   custom: CustomEdge,
+};
+
+type CopiedTableEntry = {
+  key: string;
+  table: Table;
+};
+
+type CopiedSelection = {
+  tables: CopiedTableEntry[];
+  center: {
+    x: number;
+    y: number;
+  };
+};
+
+const cloneTable = (table: Table): Table =>
+  JSON.parse(JSON.stringify(table));
+
+const buildCandidateKey = (
+  schema: string | undefined,
+  baseName: string,
+  attempt: number
+) => {
+  const suffix = attempt === 1 ? '_copy' : `_copy_${attempt}`;
+  const nameWithSuffix = `${baseName}${suffix}`;
+  return schema ? `${schema}.${nameWithSuffix}` : nameWithSuffix;
+};
+
+const createUniqueTableKey = (
+  baseKey: string,
+  occupiedKeys: Set<string>
+) => {
+  const parts = baseKey.split('.');
+  const schema = parts.length > 1 ? parts[0] : undefined;
+  const baseName = parts.length > 1 ? parts.slice(1).join('.') : baseKey;
+
+  let attempt = 1;
+  let candidate = buildCandidateKey(schema, baseName, attempt);
+
+  while (occupiedKeys.has(candidate)) {
+    attempt += 1;
+    candidate = buildCandidateKey(schema, baseName, attempt);
+  }
+
+  return candidate;
+};
+
+type ParsedForeignKey = {
+  schema?: string;
+  table: string;
+  column: string;
+};
+
+const parseForeignKey = (fk?: string | null): ParsedForeignKey | null => {
+  if (!fk) return null;
+  const cleaned = fk.trim();
+  if (!cleaned) return null;
+  const segments = cleaned.split('.');
+  if (segments.length < 2) return null;
+
+  const column = segments.pop()!;
+  const table = segments.pop()!;
+  const schema = segments.length > 0 ? segments.join('.') : undefined;
+
+  return { schema, table, column };
+};
+
+const isInputLikeElement = (target: EventTarget | null): boolean => {
+  if (!target || !(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  return (
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT' ||
+    target.isContentEditable
+  );
 };
 
 function FlowCanvasInner() {
@@ -71,6 +151,8 @@ function FlowCanvasInner() {
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
     new Set()
   );
+  const copiedSelectionRef = useRef<CopiedSelection | null>(null);
+  const pasteOffsetRef = useRef(0);
 
   // Connection mode with localStorage persistence
   const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(
@@ -90,13 +172,31 @@ function FlowCanvasInner() {
     }
   }, [connectionMode]);
 
-  const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, getZoom, screenToFlowPosition } = useReactFlow();
 
   // Use refs to avoid dependency on functions
   const reactFlowRef = useRef({ fitView, zoomIn, zoomOut, getZoom });
   useEffect(() => {
     reactFlowRef.current = { fitView, zoomIn, zoomOut, getZoom };
   }, [fitView, zoomIn, zoomOut, getZoom]);
+  const nodesRef = useRef<any[]>([]);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  const flowWrapperRef = useRef<HTMLDivElement | null>(null);
+  const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const pasteInProgressRef = useRef(false);
+
+  const updateCursorPosition = useCallback(
+    (event: React.MouseEvent) => {
+      if (!screenToFlowPosition) return;
+      lastCursorPositionRef.current = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [screenToFlowPosition]
+  );
 
   // Track pending layout trigger to auto-trigger after nodes are set
   const pendingLayoutRef = useRef(false);
@@ -416,14 +516,159 @@ function FlowCanvasInner() {
     }
   }, []); // No deps - use ref
 
+  const copySelectedTables = useCallback(() => {
+    const selectedNodes =
+      nodesRef.current?.filter((node) => node.selected) ?? [];
+
+    if (!selectedNodes.length) {
+      toast.error('Select at least one table to copy');
+      return false;
+    }
+
+    const storeTables = useStore.getState().tables;
+    const copiedTables: CopiedTableEntry[] = selectedNodes
+      .map((node) => {
+        const tableData = storeTables[node.id];
+        if (!tableData) return null;
+        return {
+          key: node.id,
+          table: cloneTable(tableData),
+        };
+      })
+      .filter(Boolean) as CopiedTableEntry[];
+
+    if (!copiedTables.length) {
+      toast.error('Unable to copy the selected tables');
+      return false;
+    }
+
+    const xs = copiedTables.map(({ table }) => table.position?.x ?? 0);
+    const ys = copiedTables.map(({ table }) => table.position?.y ?? 0);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const center = {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+    };
+
+    copiedSelectionRef.current = { tables: copiedTables, center };
+    pasteOffsetRef.current = 0;
+    toast.success(
+      `Copied ${copiedTables.length} table${
+        copiedTables.length === 1 ? '' : 's'
+      }`
+    );
+    return true;
+  }, []);
+
+  const pasteCopiedTables = useCallback(() => {
+    // Prevent duplicate pastes with debouncing
+    if (pasteInProgressRef.current) {
+      return false;
+    }
+    
+    const payload = copiedSelectionRef.current;
+
+    if (!payload || payload.tables.length === 0) {
+      toast.error('Copy tables first before pasting');
+      return false;
+    }
+
+    pasteInProgressRef.current = true;
+
+    const state = useStore.getState();
+    const existingKeys = new Set(Object.keys(state.tables));
+    const newTables: TableState = {};
+    const newKeyMap = new Map<string, string>();
+
+    const payloadCenter = payload.center ?? { x: 0, y: 0 };
+    const cursorPosition = lastCursorPositionRef.current;
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (cursorPosition) {
+      deltaX = cursorPosition.x - payloadCenter.x;
+      deltaY = cursorPosition.y - payloadCenter.y;
+      pasteOffsetRef.current = 0;
+    } else {
+      pasteOffsetRef.current += 1;
+      const offsetAmount = pasteOffsetRef.current * 40;
+      deltaX = offsetAmount;
+      deltaY = offsetAmount;
+    }
+
+    payload.tables.forEach(({ key, table }) => {
+      const nextKey = createUniqueTableKey(key, existingKeys);
+      existingKeys.add(nextKey);
+      newKeyMap.set(key, nextKey);
+
+      const duplicatedTable = cloneTable(table);
+      duplicatedTable.title = nextKey;
+      const baseX = duplicatedTable.position?.x ?? 0;
+      const baseY = duplicatedTable.position?.y ?? 0;
+      duplicatedTable.position = {
+        x: baseX + deltaX,
+        y: baseY + deltaY,
+      };
+
+      newTables[nextKey] = duplicatedTable;
+    });
+
+    Object.values(newTables).forEach((table) => {
+      if (!table.columns) return;
+
+      table.columns = table.columns.map((column) => {
+        if (!column.fk) {
+          return { ...column };
+        }
+
+        const parsed = parseForeignKey(column.fk);
+        if (!parsed) {
+          return { ...column };
+        }
+
+        const originalTargetKey = parsed.schema
+          ? `${parsed.schema}.${parsed.table}`
+          : parsed.table;
+
+        if (newKeyMap.has(originalTargetKey)) {
+          const mappedKey = newKeyMap.get(originalTargetKey)!;
+          return {
+            ...column,
+            fk: `${mappedKey}.${parsed.column}`,
+          };
+        }
+
+        return { ...column, fk: undefined };
+      });
+    });
+
+    state.addTables(newTables);
+    const newCount = Object.keys(newTables).length;
+    toast.success(
+      `Pasted ${newCount} table${newCount === 1 ? '' : 's'}`
+    );
+    
+    // Reset paste flag after a short delay to prevent rapid duplicate pastes
+    setTimeout(() => {
+      pasteInProgressRef.current = false;
+    }, 100);
+    
+    return true;
+  }, []);
+
   // Keyboard shortcuts (memoized to prevent re-creation)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+      const isInputField = isInputLikeElement(event.target);
 
       // Ctrl/Cmd + A: Select all nodes
       if (cmdOrCtrl && event.key === 'a') {
+        if (isInputField) return;
         event.preventDefault();
         setNodes((nds) =>
           nds.map((node) => ({
@@ -433,8 +678,33 @@ function FlowCanvasInner() {
         );
       }
 
-      // Delete: Remove selected nodes
+      // Ctrl/Cmd + C: Copy selection
+      if (cmdOrCtrl && event.key.toLowerCase() === 'c') {
+        if (isInputField) return;
+        const copied = copySelectedTables();
+        if (copied) {
+          event.preventDefault();
+        }
+      }
+
+      // Ctrl/Cmd + V: Paste copied tables
+      if (cmdOrCtrl && event.key.toLowerCase() === 'v') {
+        if (isInputField) return;
+        if (pasteInProgressRef.current) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault(); // Prevent React Flow's built-in paste
+        const pasted = pasteCopiedTables();
+        if (!pasted) {
+          // If paste failed, reset the flag immediately
+          pasteInProgressRef.current = false;
+        }
+      }
+
+      // Delete / Backspace: Remove selected nodes
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (isInputField) return;
         setNodes((nds) => {
           const hasSelection = nds.some((node) => node.selected);
           if (hasSelection) {
@@ -458,14 +728,8 @@ function FlowCanvasInner() {
         });
       }
 
-      // Space: Fit view (only when not typing in input fields)
+      // Space: Fit view (ignore when typing)
       if (event.code === 'Space') {
-        const target = event.target as HTMLElement;
-        const isInputField =
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable;
-
         if (!isInputField) {
           event.preventDefault();
           reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
@@ -485,11 +749,20 @@ function FlowCanvasInner() {
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === 'v' || key === 'meta' || key === 'control') {
+        pasteInProgressRef.current = false;
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [setNodes, setEdges]); // Stable deps
+  }, [setNodes, setEdges, copySelectedTables, pasteCopiedTables]);
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
@@ -730,7 +1003,11 @@ function FlowCanvasInner() {
   }, [edges, highlightedEdges, selectedEdge]);
 
   return (
-    <div className="w-full h-screen">
+    <div
+      className="w-full h-screen"
+      ref={flowWrapperRef}
+      onMouseMove={updateCursorPosition}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edgesWithHighlight}
