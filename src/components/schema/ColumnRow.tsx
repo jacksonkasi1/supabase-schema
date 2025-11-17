@@ -27,6 +27,12 @@ import {
   CommandItem,
 } from '@/components/ui/command';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   GripVertical,
   Key,
   Sparkles,
@@ -240,23 +246,31 @@ export function ColumnRow({
         </PopoverContent>
       </Popover>
 
-      {/* NULL/NOT NULL Indicator */}
-      <button
-        onClick={() =>
-          updateColumn(tableId, columnIndex, {
-            required: !column.required,
-          })
-        }
-        className={cn(
-          'w-8 h-7 flex items-center justify-center text-[11px] font-bold rounded border transition-colors shrink-0',
-          column.required
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400'
-            : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-        )}
-        title={column.required ? 'NOT NULL' : 'NULL'}
-      >
-        {column.required ? 'NN' : 'N'}
-      </button>
+      {/* NULL/NOT NULL Chip - Like DrawSQL */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() =>
+                updateColumn(tableId, columnIndex, {
+                  required: !column.required,
+                })
+              }
+              className={cn(
+                'w-8 h-7 flex items-center justify-center text-[11px] font-bold rounded border transition-colors shrink-0',
+                column.required
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400'
+                  : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+              )}
+            >
+              {column.required ? 'NN' : 'N'}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{column.required ? 'NOT NULL (click to allow NULL)' : 'Nullable (click to require)'}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       {/* More Options */}
       <DropdownMenu>

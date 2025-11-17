@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Column } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,6 +37,9 @@ import {
   Trash2,
   Focus,
   Palette,
+  Pencil,
+  Maximize2,
+  Copy,
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -55,6 +59,7 @@ export function TableItem({ tableId }: TableItemProps) {
     addColumn,
     deleteTable,
     triggerFocusTable,
+    updateTableName,
   } = useStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -62,6 +67,9 @@ export function TableItem({ tableId }: TableItemProps) {
   
   const table = tables[tableId];
   const isExpanded = expandedTables.has(tableId);
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(table?.title || '');
 
   const {
     attributes,
@@ -112,13 +120,13 @@ export function TableItem({ tableId }: TableItemProps) {
                 : undefined,
             }}
           >
-            {/* Drag Handle */}
+            {/* 1) Drag Handle - Far Left */}
             <button
               {...attributes}
               {...listeners}
-              className="cursor-grab active:cursor-grabbing shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <GripVertical className="h-4 w-4" />
             </button>
 
             {/* Expand Icon */}
@@ -136,6 +144,7 @@ export function TableItem({ tableId }: TableItemProps) {
             <button
               onClick={() => setShowColorPicker(true)}
               className="shrink-0 hover:scale-110 transition-transform"
+              title="Change color"
             >
               <div
                 className="w-3 h-3 rounded-sm border border-border/50"
@@ -143,49 +152,125 @@ export function TableItem({ tableId }: TableItemProps) {
               />
             </button>
 
-            {/* Table Name */}
-            <span
-              className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer"
-              onClick={() => toggleTableExpanded(tableId)}
-            >
-              {table.title}
-            </span>
+            {/* 2) Table Name - Left Aligned, Truncated */}
+            {isRenaming ? (
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={() => {
+                  if (renameValue.trim() && renameValue !== table.title) {
+                    updateTableName(tableId, renameValue.trim());
+                  }
+                  setIsRenaming(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (renameValue.trim() && renameValue !== table.title) {
+                      updateTableName(tableId, renameValue.trim());
+                    }
+                    setIsRenaming(false);
+                  }
+                  if (e.key === 'Escape') {
+                    setRenameValue(table.title);
+                    setIsRenaming(false);
+                  }
+                }}
+                className="flex-1 h-7 text-sm px-2"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span
+                className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer"
+                onClick={() => toggleTableExpanded(tableId)}
+              >
+                {table.title}
+              </span>
+            )}
 
-            {/* Column Count Badge */}
+            {/* 3) Column Count Badge - Always Visible */}
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal">
               {table.columns?.length || 0}
             </Badge>
 
-            {/* Actions Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <MoreVertical className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleFocusTable}>
-                  <Focus className="mr-2 h-3.5 w-3.5" />
-                  Focus in canvas
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowColorPicker(true)}>
-                  <Palette className="mr-2 h-3.5 w-3.5" />
-                  Change color
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setShowDeleteDialog(true)}
-                  className="text-destructive"
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete table
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Right Icon Group: 4) Rename, 5) Focus, 6) More Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              {/* 4) Rename Icon (Pencil) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRenameValue(table.title);
+                  setIsRenaming(true);
+                }}
+                title="Rename table"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+
+              {/* 5) Focus/Zoom Icon */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFocusTable();
+                }}
+                title="Focus table"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </Button>
+
+              {/* 6) 3-Dots Menu - Last Element */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => e.stopPropagation()}
+                    title="More actions"
+                  >
+                    <MoreVertical className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setRenameValue(table.title);
+                      setIsRenaming(true);
+                    }}
+                  >
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Rename table
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleFocusTable}>
+                    <Focus className="mr-2 h-3.5 w-3.5" />
+                    Focus in canvas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowColorPicker(true)}>
+                    <Palette className="mr-2 h-3.5 w-3.5" />
+                    Change color
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Duplicate table
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete table
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           <CollapsibleContent>
