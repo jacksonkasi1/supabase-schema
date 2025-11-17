@@ -2,7 +2,6 @@
 
 import { useStore } from '@/lib/store';
 import { TableCard } from './TableCard';
-import { TableEditor } from './TableEditor';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
@@ -10,7 +9,6 @@ import { useState, useMemo } from 'react';
 export function SchemaSidebarGui() {
   const { tables } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [editingTableId, setEditingTableId] = useState<string | null>(null);
 
   const tableIds = useMemo(() => Object.keys(tables), [tables]);
 
@@ -21,15 +19,6 @@ export function SchemaSidebarGui() {
       tables[id]?.title?.toLowerCase().includes(query)
     );
   }, [tableIds, tables, searchQuery]);
-
-  if (editingTableId) {
-    return (
-      <TableEditor
-        tableId={editingTableId}
-        onClose={() => setEditingTableId(null)}
-      />
-    );
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -50,13 +39,7 @@ export function SchemaSidebarGui() {
       <div className="flex-1 overflow-y-auto">
         {filteredTableIds.length > 0 ? (
           filteredTableIds.map((tableId) => (
-            <div
-              key={tableId}
-              onClick={() => setEditingTableId(tableId)}
-              className="cursor-pointer"
-            >
-              <TableCard tableId={tableId} />
-            </div>
+            <TableCard key={tableId} tableId={tableId} />
           ))
         ) : (
           <div className="text-center py-8 text-xs text-muted-foreground">
