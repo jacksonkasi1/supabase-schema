@@ -6,7 +6,7 @@ import { Key, Link2, Sparkles, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TableNodeData } from '@/types/flow';
 
-function EnhancedTableNodeComponent({ data, selected, id }: NodeProps) {
+function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
   const tableName = id;
   const headerColor = (tableData as any).color || '#3B82F6';
@@ -118,4 +118,4 @@ function EnhancedTableNodeComponent({ data, selected, id }: NodeProps) {
   );
 }
 
-export const EnhancedTableNode = memo(EnhancedTableNodeComponent);
+export const ModernTableNode = memo(ModernTableNodeComponent);

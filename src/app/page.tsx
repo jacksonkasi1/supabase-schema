@@ -7,7 +7,7 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { ImportSQL } from '@/components/ImportSQL';
 import { SearchBar } from '@/components/SearchBar';
-import { EnhancedSchemaSidebar } from '@/components/schema/EnhancedSchemaSidebar';
+import { SchemaSidebarNew } from '@/components/schema/SchemaSidebarNew';
 import { Button } from '@/components/ui/button';
 import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -151,7 +151,7 @@ export default function HomePage() {
         />
         <FlowCanvas />
       </div>
-      <EnhancedSchemaSidebar />
+      <SchemaSidebarNew />
       <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
       <ImportSQL open={isImportOpen} onClose={() => setIsImportOpen(false)} />
     </div>

@@ -18,16 +18,16 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { EnhancedColumnRow } from './EnhancedColumnRow';
-import { EnhancedColumnRow } from './EnhancedColumnRow';
+import { ColumnRow } from './ColumnRow';
+import { ColumnRow } from './ColumnRow';
 import { useState } from 'react';
 
-interface EnhancedColumnEditorProps {
+interface ColumnEditorProps {
   tableId: string;
   columns: Column[];
 }
 
-export function EnhancedColumnEditor({ tableId, columns }: EnhancedColumnEditorProps) {
+export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
   const { updateColumn } = useStore();
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -81,7 +81,7 @@ export function EnhancedColumnEditor({ tableId, columns }: EnhancedColumnEditorP
         strategy={verticalListSortingStrategy}
       >
         {columns.map((column, index) => (
-          <EnhancedColumnRow
+          <ColumnRow
             key={`${column.title}-${index}`}
             tableId={tableId}
             column={column}
@@ -93,7 +93,7 @@ export function EnhancedColumnEditor({ tableId, columns }: EnhancedColumnEditorP
       <DragOverlay>
         {activeId !== null && columns[parseInt(activeId)] ? (
           <div className="bg-background border border-border rounded shadow-lg p-2">
-            <EnhancedColumnRow
+            <ColumnRow
               tableId={tableId}
               column={columns[parseInt(activeId)]}
               columnIndex={parseInt(activeId)}

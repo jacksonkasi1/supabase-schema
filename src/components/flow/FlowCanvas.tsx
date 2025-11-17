@@ -17,7 +17,7 @@ import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
 import { TableNode } from './TableNode';
 import { ViewNode } from './ViewNode';
-import { EnhancedTableNode } from './EnhancedTableNode';
+import { ModernTableNode } from './ModernTableNode';
 import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
 import {
@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { Table, TableState } from '@/lib/types';
 
 const nodeTypes = {
-  table: EnhancedTableNode,
+  table: ModernTableNode,
   view: ViewNode,
 };
 

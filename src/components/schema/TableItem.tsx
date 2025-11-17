@@ -39,15 +39,15 @@ import {
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { EnhancedColumnEditor } from './EnhancedColumnEditor';
+import { ColumnEditor } from './ColumnEditor';
 import { ColorPickerDialog } from './ColorPickerDialog';
 import { cn } from '@/lib/utils';
 
-interface EnhancedTableItemProps {
+interface TableItemProps {
   tableId: string;
 }
 
-export function EnhancedTableItem({ tableId }: EnhancedTableItemProps) {
+export function TableItem({ tableId }: TableItemProps) {
   const {
     tables,
     expandedTables,
@@ -198,7 +198,7 @@ export function EnhancedTableItem({ tableId }: EnhancedTableItemProps) {
               {/* Columns List */}
               <div className="py-1">
                 {table.columns && table.columns.length > 0 ? (
-                  <EnhancedColumnEditor tableId={tableId} columns={table.columns} />
+                  <ColumnEditor tableId={tableId} columns={table.columns} />
                 ) : (
                   <div className="text-center py-6 text-xs text-muted-foreground">
                     No columns
