@@ -1,7 +1,13 @@
 'use client';
 
 import { create } from 'zustand';
-import { TableState, Column, SchemaView, SupabaseApiKey } from './types';
+import {
+  TableState,
+  Column,
+  SchemaView,
+  SupabaseApiKey,
+  EnumTypeDefinition,
+} from './types';
 import { RelationshipType } from '@/types/flow';
 
 interface AppState {
@@ -20,7 +26,10 @@ interface AppState {
   // Table state
   tables: TableState;
   setTables: (definition: any, paths: any) => void;
-  updateTablesFromAI: (tables: TableState) => void;
+  updateTablesFromAI: (
+    tables: TableState,
+    meta?: { enumTypes?: Record<string, EnumTypeDefinition> }
+  ) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
   updateTableName: (tableId: string, newName: string) => void;
   updateTableColor: (tableId: string, color: string) => void;
@@ -89,6 +98,10 @@ interface AppState {
 
   // Add new tables (used for copy/paste, AI updates, etc.)
   addTables: (tables: TableState) => void;
+
+  // Enum types
+  enumTypes: Record<string, EnumTypeDefinition>;
+  setEnumTypes: (types: Record<string, EnumTypeDefinition>) => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -166,6 +179,7 @@ function performSave() {
       // Clear only table data, keep user preferences
       localStorage.removeItem('table-list');
       localStorage.removeItem('edge-relationships');
+      localStorage.removeItem('enum-types');
     }
 
     // Store data with size-optimized JSON (no extra whitespace)
@@ -173,10 +187,15 @@ function performSave() {
     const edgeRelationshipsJson = JSON.stringify(state.edgeRelationships);
     const visibleSchemasJson = JSON.stringify(Array.from(state.visibleSchemas));
     const collapsedSchemasJson = JSON.stringify(Array.from(state.collapsedSchemas));
+    const enumTypesJson = JSON.stringify(state.enumTypes);
 
     // Check individual item sizes before saving
-    const totalNewSize = tablesJson.length + edgeRelationshipsJson.length +
-                        visibleSchemasJson.length + collapsedSchemasJson.length;
+    const totalNewSize =
+      tablesJson.length +
+      edgeRelationshipsJson.length +
+      visibleSchemasJson.length +
+      collapsedSchemasJson.length +
+      enumTypesJson.length;
 
     if (totalNewSize > MAX_STORAGE_SIZE) {
       console.error(`Cannot save: Data size (${(totalNewSize / 1024 / 1024).toFixed(2)}MB) exceeds ${MAX_STORAGE_SIZE / 1024 / 1024}MB limit`);
@@ -193,6 +212,7 @@ function performSave() {
     localStorage.setItem('edge-relationships', edgeRelationshipsJson);
     localStorage.setItem('visible-schemas', visibleSchemasJson);
     localStorage.setItem('collapsed-schemas', collapsedSchemasJson);
+    localStorage.setItem('enum-types', enumTypesJson);
   } catch (error) {
     if (error instanceof Error && error.name === 'QuotaExceededError') {
       console.error('localStorage quota exceeded. Clearing cache...');
@@ -246,6 +266,7 @@ export const useStore = create<AppState>((set, get) => {
   sidebarOpen: true,
   expandedTables: new Set<string>(),
   tables: {},
+  enumTypes: {},
   tableSelected: new Set<Element>(),
   tableHighlighted: '',
   connectorHighlighted: [],
@@ -373,7 +394,7 @@ export const useStore = create<AppState>((set, get) => {
     get().saveToLocalStorage();
   },
 
-  updateTablesFromAI: (updatedTables) => {
+  updateTablesFromAI: (updatedTables, meta) => {
     set((state) => {
       const nextTables: TableState = {};
       const discoveredSchemas = new Set<string>();
@@ -401,13 +422,21 @@ export const useStore = create<AppState>((set, get) => {
       const { tables: sanitizedTables, removedTables } = sanitizeTables(nextTables);
 
       if (removedTables > 0) {
-        console.log(`[updateTablesFromAI] Sanitized ${removedTables} invalid table(s) from AI response`);
+        console.log(
+          `[updateTablesFromAI] Sanitized ${removedTables} invalid table(s) from AI response`
+        );
       }
 
-      return {
+      const updates: Partial<AppState> = {
         tables: sanitizedTables,
         visibleSchemas: mergedVisibleSchemas,
       };
+
+      if (meta?.enumTypes) {
+        updates.enumTypes = meta.enumTypes;
+      }
+
+      return updates;
     });
 
     get().saveToLocalStorage();
@@ -744,6 +773,15 @@ export const useStore = create<AppState>((set, get) => {
       if (collapsedSchemasData) {
         set({ collapsedSchemas: new Set(JSON.parse(collapsedSchemasData)) });
       }
+
+      const enumTypesData = localStorage.getItem('enum-types');
+      if (enumTypesData) {
+        try {
+          set({ enumTypes: JSON.parse(enumTypesData) });
+        } catch (error) {
+          console.error('Error parsing enum types from localStorage', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
@@ -779,6 +817,11 @@ export const useStore = create<AppState>((set, get) => {
     get().saveToLocalStorage();
   },
 
+  setEnumTypes: (types) => {
+    set({ enumTypes: types });
+    get().saveToLocalStorage();
+  },
+
   clearCache: () => {
     if (typeof window === 'undefined') return;
 
@@ -788,6 +831,7 @@ export const useStore = create<AppState>((set, get) => {
       localStorage.removeItem('edge-relationships');
       localStorage.removeItem('visible-schemas');
       localStorage.removeItem('collapsed-schemas');
+      localStorage.removeItem('enum-types');
 
       // Clear timeout if pending
       if (saveTimeoutId) {

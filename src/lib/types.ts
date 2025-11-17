@@ -6,9 +6,42 @@ export interface Column {
   required?: boolean;
   pk?: boolean;
   fk?: string | undefined;
+  unique?: boolean;
   enumValues?: string[]; // Values for enum types
   enumTypeName?: string; // Name of the enum type (e.g., "user_status")
   comment?: string; // Comment/note for the column
+}
+
+export interface ForeignKeyReference {
+  schema?: string;
+  table: string;
+  columns: string[];
+  onDelete?: string;
+  onUpdate?: string;
+}
+
+export type ConstraintType = 'primary_key' | 'foreign_key' | 'unique' | 'check';
+
+export interface TableConstraint {
+  name?: string;
+  type: ConstraintType;
+  columns?: string[];
+  reference?: ForeignKeyReference;
+  expression?: string; // Raw expression for check constraints
+}
+
+export interface TableIndex {
+  name: string;
+  columns: string[]; // Raw columns or expressions used by the index
+  unique?: boolean;
+  using?: string | null;
+  where?: string | null;
+}
+
+export interface EnumTypeDefinition {
+  name: string;
+  schema?: string;
+  values: string[];
 }
 
 export interface Position {
@@ -29,6 +62,8 @@ export interface Table {
   schema?: string; // Schema name (e.g., 'public', 'auth', 'storage')
   color?: string; // Header color for the table card
   comment?: string; // Comment/note for the table
+  constraints?: TableConstraint[];
+  indexes?: TableIndex[];
 }
 
 export interface TableState {

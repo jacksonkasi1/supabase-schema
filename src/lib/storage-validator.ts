@@ -33,7 +33,13 @@ export function validateAndCleanLocalStorage(): void {
       }
 
       // Validate JSON items
-      if (key.startsWith('table') || key.startsWith('edge') || key.startsWith('visible') || key.startsWith('collapsed')) {
+      if (
+        key.startsWith('table') ||
+        key.startsWith('edge') ||
+        key.startsWith('visible') ||
+        key.startsWith('collapsed') ||
+        key === 'enum-types'
+      ) {
         try {
           JSON.parse(value);
         } catch (e) {
@@ -97,6 +103,7 @@ export function validateAndCleanLocalStorage(): void {
       localStorage.removeItem('edge-relationships');
       localStorage.removeItem('visible-schemas');
       localStorage.removeItem('collapsed-schemas');
+      localStorage.removeItem('enum-types');
 
       totalSize = 0;
       for (let key in localStorage) {

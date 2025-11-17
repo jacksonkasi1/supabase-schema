@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
+import { TableState } from '@/lib/types';
 import { generateSchemaSQL, generateTableSQL, parseSchemaSQL } from '@/lib/schema-sql';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import { AlertCircle, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function SchemaSidebarSql() {
-  const { tables, updateTablesFromAI } = useStore();
+  const { tables, enumTypes, updateTablesFromAI } = useStore();
   const [selectedTable, setSelectedTable] = useState<string>('__all__');
   const [sql, setSql] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +26,12 @@ export function SchemaSidebarSql() {
 
   useEffect(() => {
     if (selectedTable === '__all__') {
-      setSql(generateSchemaSQL(tables));
+      setSql(generateSchemaSQL(tables, enumTypes));
     } else if (tables[selectedTable]) {
-      setSql(generateTableSQL(tables[selectedTable]));
+      setSql(generateTableSQL(selectedTable, tables[selectedTable], enumTypes));
     }
     setError(null);
-  }, [selectedTable, tables]);
+  }, [selectedTable, tables, enumTypes]);
 
   const handleApply = () => {
     const result = parseSchemaSQL(sql);
@@ -41,22 +42,67 @@ export function SchemaSidebarSql() {
       return;
     }
 
-    if (Object.keys(result.tables).length === 0) {
-      setError('No valid tables found in SQL');
-      toast.error('No tables found');
+    const hasTables = Object.keys(result.tables).length > 0;
+    const hasEnums = Object.keys(result.enumTypes).length > 0;
+
+    if (!hasTables && !hasEnums) {
+      setError('No schema definitions detected');
+      toast.error('Nothing to apply');
       return;
     }
 
-    updateTablesFromAI(result.tables);
+    if (selectedTable === '__all__') {
+      updateTablesFromAI(result.tables, { enumTypes: result.enumTypes });
+      setError(null);
+      toast.success('Schema updated from SQL');
+      return;
+    }
+
+    const parsedTables = Object.entries(result.tables);
+    if (parsedTables.length === 0) {
+      setError('Provide SQL for the selected table');
+      toast.error('Missing table definition');
+      return;
+    }
+
+    if (parsedTables.length > 1) {
+      setError('Multiple tables detected. Use Whole schema mode instead.');
+      toast.error('Multiple tables detected');
+      return;
+    }
+
+    const [newKey, newTable] = parsedTables[0];
+    const nextTables: TableState = {};
+
+    Object.entries(tables).forEach(([tableId, tableValue]) => {
+      if (tableId === selectedTable) return;
+      nextTables[tableId] = tableValue;
+    });
+
+    const preservedPosition =
+      tables[selectedTable]?.position ?? newTable.position ?? { x: 0, y: 0 };
+
+    nextTables[newKey] = {
+      ...newTable,
+      position: preservedPosition,
+    };
+
+    const mergedEnums = {
+      ...enumTypes,
+      ...result.enumTypes,
+    };
+
+    updateTablesFromAI(nextTables, { enumTypes: mergedEnums });
+    setSelectedTable(newKey);
     setError(null);
-    toast.success('Schema updated from SQL');
+    toast.success('Table updated from SQL');
   };
 
   const handleReset = () => {
     if (selectedTable === '__all__') {
-      setSql(generateSchemaSQL(tables));
+      setSql(generateSchemaSQL(tables, enumTypes));
     } else if (tables[selectedTable]) {
-      setSql(generateTableSQL(tables[selectedTable]));
+      setSql(generateTableSQL(selectedTable, tables[selectedTable], enumTypes));
     }
     setError(null);
     toast.success('SQL reset from schema');
