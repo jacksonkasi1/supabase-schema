@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DrawSQLTableList } from './DrawSQLTableList';
+import { EnhancedTableList } from './EnhancedTableList';
 import { SchemaSidebarSql } from './SchemaSidebarSql';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { SchemaCommandPalette } from './SchemaCommandPalette';
 
-export function DrawSQLSidebar() {
+export function EnhancedSchemaSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -66,7 +66,7 @@ export function DrawSQLSidebar() {
           </div>
 
           <TabsContent value="gui" className="flex-1 overflow-hidden mt-0">
-            <DrawSQLTableList onOpenCommand={() => setCommandOpen(true)} />
+            <EnhancedTableList onOpenCommand={() => setCommandOpen(true)} />
           </TabsContent>
 
           <TabsContent value="sql" className="flex-1 overflow-hidden mt-0">

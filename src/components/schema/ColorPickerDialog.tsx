@@ -28,19 +28,19 @@ const DRAWSQL_COLORS = [
   '#EF4444', // red
 ];
 
-interface DrawSQLColorPickerProps {
+interface ColorPickerColorPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tableId: string;
   currentColor?: string;
 }
 
-export function DrawSQLColorPicker({
+export function ColorPickerColorPicker({
   open,
   onOpenChange,
   tableId,
   currentColor,
-}: DrawSQLColorPickerProps) {
+}: ColorPickerColorPickerProps) {
   const { updateTableColor } = useStore();
 
   const handleColorSelect = (color: string) => {

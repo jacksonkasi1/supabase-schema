@@ -70,19 +70,19 @@ const POSTGRES_TYPES = [
 
 type IndexType = 'primary_key' | 'unique_key' | 'index' | 'none';
 
-interface DrawSQLColumnRowProps {
+interface EnhancedColumnRowProps {
   tableId: string;
   column: Column;
   columnIndex: number;
   isDragOverlay?: boolean;
 }
 
-export function DrawSQLColumnRow({
+export function EnhancedColumnRow({
   tableId,
   column,
   columnIndex,
   isDragOverlay = false,
-}: DrawSQLColumnRowProps) {
+}: EnhancedColumnRowProps) {
   const { tables, updateColumn, deleteColumn } = useStore();
   const [typeOpen, setTypeOpen] = useState(false);
 

@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Kbd } from '@/components/ui/kbd';
 import { Search, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DrawSQLTableItem } from './DrawSQLTableItem';
+import { EnhancedTableItem } from './EnhancedTableItem';
 import {
   DndContext,
   closestCenter,
@@ -24,11 +24,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 
-interface DrawSQLTableListProps {
+interface EnhancedTableListProps {
   onOpenCommand: () => void;
 }
 
-export function DrawSQLTableList({ onOpenCommand }: DrawSQLTableListProps) {
+export function EnhancedTableList({ onOpenCommand }: EnhancedTableListProps) {
   const { tables } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -94,7 +94,7 @@ export function DrawSQLTableList({ onOpenCommand }: DrawSQLTableListProps) {
                 strategy={verticalListSortingStrategy}
               >
                 {filteredTableIds.map((tableId) => (
-                  <DrawSQLTableItem key={tableId} tableId={tableId} />
+                  <EnhancedTableItem key={tableId} tableId={tableId} />
                 ))}
               </SortableContext>
             </DndContext>

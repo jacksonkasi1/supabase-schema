@@ -39,15 +39,15 @@ import {
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { DrawSQLColumnEditor } from './DrawSQLColumnEditor';
-import { DrawSQLColorPicker } from './DrawSQLColorPicker';
+import { EnhancedColumnEditor } from './EnhancedColumnEditor';
+import { ColorPickerDialog } from './ColorPickerDialog';
 import { cn } from '@/lib/utils';
 
-interface DrawSQLTableItemProps {
+interface EnhancedTableItemProps {
   tableId: string;
 }
 
-export function DrawSQLTableItem({ tableId }: DrawSQLTableItemProps) {
+export function EnhancedTableItem({ tableId }: EnhancedTableItemProps) {
   const {
     tables,
     expandedTables,
@@ -198,7 +198,7 @@ export function DrawSQLTableItem({ tableId }: DrawSQLTableItemProps) {
               {/* Columns List */}
               <div className="py-1">
                 {table.columns && table.columns.length > 0 ? (
-                  <DrawSQLColumnEditor tableId={tableId} columns={table.columns} />
+                  <EnhancedColumnEditor tableId={tableId} columns={table.columns} />
                 ) : (
                   <div className="text-center py-6 text-xs text-muted-foreground">
                     No columns
@@ -224,7 +224,7 @@ export function DrawSQLTableItem({ tableId }: DrawSQLTableItemProps) {
       </div>
 
       {/* Color Picker Dialog */}
-      <DrawSQLColorPicker
+      <ColorPickerDialog
         open={showColorPicker}
         onOpenChange={setShowColorPicker}
         tableId={tableId}
