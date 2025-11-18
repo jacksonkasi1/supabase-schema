@@ -4,7 +4,6 @@ import { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Kbd } from '@/components/ui/kbd';
 import { Search, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TableItem } from './TableItem';
@@ -24,11 +23,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 
-interface TableListProps {
-  onOpenCommand: () => void;
-}
-
-export function TableList({ onOpenCommand }: TableListProps) {
+export function TableList() {
   const { tables } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -71,15 +66,9 @@ export function TableList({ onOpenCommand }: TableListProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-9 pl-9 pr-16 text-sm"
+            className="h-9 pl-9 text-sm"
+            autoFocus
           />
-          <button
-            onClick={onOpenCommand}
-            className="absolute right-3 top-1/2 -translate-y-1/2 hover:bg-accent rounded px-1"
-            title="Open command palette (⌘K)"
-          >
-            <Kbd>⌘K</Kbd>
-          </button>
         </div>
       </div>
 
