@@ -217,11 +217,14 @@ export function ColumnRow({
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[220px] p-0" align="end">
-          <Command>
-            <CommandInput placeholder="Search type..." className="h-9 text-sm" />
-            <CommandEmpty>No type found.</CommandEmpty>
-            <CommandGroup className="max-h-[250px] overflow-auto">
+        <PopoverContent className="w-[200px] p-0 border-border/50 shadow-xl" align="end">
+          <Command className="bg-popover">
+            <CommandInput 
+              placeholder="Search type..." 
+              className="h-8 text-xs font-mono border-0 outline-none ring-0 focus:outline-none focus:ring-0" 
+            />
+            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
+            <CommandGroup className="max-h-[200px] overflow-auto p-1">
               {POSTGRES_TYPES.map((type) => (
                 <CommandItem
                   key={type}
@@ -230,11 +233,11 @@ export function ColumnRow({
                     updateColumn(tableId, columnIndex, { format: type });
                     setTypeOpen(false);
                   }}
-                  className="text-sm font-mono"
+                  className="text-xs font-mono aria-selected:bg-teal-500/10 aria-selected:text-teal-600 rounded-sm py-1.5"
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-3.5 w-3.5',
+                      'mr-2 h-3 w-3 text-teal-500',
                       (column.format || column.type) === type ? 'opacity-100' : 'opacity-0'
                     )}
                   />
