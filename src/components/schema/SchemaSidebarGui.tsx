@@ -24,7 +24,7 @@ import {
 } from '@dnd-kit/sortable';
 
 export function SchemaSidebarGui() {
-  const { tables } = useStore();
+  const { tables, reorderTables } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const tableIds = useMemo(() => Object.keys(tables), [tables]);
@@ -54,31 +54,31 @@ export function SchemaSidebarGui() {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = filteredTableIds.indexOf(active.id as string);
-      const newIndex = filteredTableIds.indexOf(over.id as string);
+      const oldIndex = tableIds.indexOf(active.id as string);
+      const newIndex = tableIds.indexOf(over.id as string);
 
-      // TODO: Implement table reordering in store
-      const reorderedIds = arrayMove(filteredTableIds, oldIndex, newIndex);
-      console.log('Reordered table IDs:', reorderedIds);
+      // Reorder all tables, not just filtered ones
+      const reorderedIds = arrayMove(tableIds, oldIndex, newIndex);
+      reorderTables(reorderedIds);
     }
   };
 
   return (
     <div className="flex flex-col h-full">
       {/* Search - DrawSQL Style */}
-      <div className="px-4 py-2.5 border-b border-border/30">
-        <InputGroup className="h-9 rounded-md border-border/40 bg-muted/20 hover:bg-muted/30 focus-within:bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
-          <InputGroupAddon className="pl-3">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+      <div className="px-3 py-2 border-b border-border/20">
+        <InputGroup className="h-8 rounded-md border-border/30 bg-muted/15 hover:bg-muted/25 focus-within:bg-background focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/15 transition-all">
+          <InputGroupAddon className="pl-2.5">
+            <Search className="h-3.5 w-3.5 text-muted-foreground/70" />
           </InputGroupAddon>
           <InputGroupInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-full text-[13px] px-2 py-0 placeholder:text-muted-foreground/60"
+            className="h-full text-[12px] px-2 py-0 placeholder:text-muted-foreground/50"
           />
-          <InputGroupAddon className="pr-3">
-            <Kbd className="text-[10px] px-1.5 py-0.5">⌘K</Kbd>
+          <InputGroupAddon className="pr-2.5">
+            <Kbd className="text-[10px] px-1.5 py-0.5 bg-muted/40 border-border/30">⌘K</Kbd>
           </InputGroupAddon>
         </InputGroup>
       </div>

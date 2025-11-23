@@ -206,11 +206,11 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
       >
         <div
           className={cn(
-            'group border-b border-border/20 hover:bg-muted/30 transition-colors',
+            'group border-b border-border/10 hover:bg-muted/20 transition-colors',
             isDragging && 'opacity-50 scale-[0.98] shadow-lg z-50'
           )}
         >
-          <div className="flex items-center gap-1.5 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 px-2 py-1.5">
             {/* Drag Handle - LEFT FIRST (DrawSQL Style) */}
             <button
               {...attributes}
@@ -234,7 +234,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
 
             {/* Color Indicator */}
             <div
-              className="w-3 h-3 rounded shrink-0 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-offset-background transition-all"
+              className="w-2.5 h-2.5 rounded shrink-0 cursor-pointer hover:ring-1 hover:ring-offset-1 hover:ring-offset-background transition-all"
               style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
               onClick={() => toggleTableExpanded(tableId)}
             />
@@ -249,13 +249,13 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                   if (e.key === 'Enter') handleSaveRename();
                   if (e.key === 'Escape') handleCancelRename();
                 }}
-                className="h-6 flex-1 text-sm font-medium px-2 border-input"
+                className="h-6 flex-1 text-[13px] font-medium px-2 border focus-visible:ring-1 focus-visible:ring-primary/30"
                 placeholder="Table name"
                 autoFocus
               />
             ) : (
               <span
-                className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer select-none"
+                className="flex-1 text-[13px] font-medium text-foreground truncate cursor-pointer select-none"
                 onClick={() => toggleTableExpanded(tableId)}
               >
                 {table.title}
@@ -265,7 +265,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
             {/* Column Count Badge */}
             <Badge
               variant="secondary"
-              className="text-[10px] px-1.5 py-0.5 h-5 shrink-0 font-medium tabular-nums bg-muted/60 hover:bg-muted/80 transition-colors"
+              className="text-[10px] px-1.5 py-0 h-[18px] shrink-0 font-normal tabular-nums bg-muted/50 hover:bg-muted/70 transition-colors border-0"
             >
               {table.columns?.length || 0}
             </Badge>
@@ -276,29 +276,29 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-5 w-5 hover:bg-accent/60"
                 onClick={handleStartRename}
                 title="Rename table"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </Button>
 
               {/* Focus Icon */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-5 w-5 hover:bg-accent/60"
                 onClick={handleFocusTable}
                 title="Focus on canvas"
               >
-                <Focus className="h-3.5 w-3.5" />
+                <Focus className="h-3 w-3" />
               </Button>
 
               {/* 3-Dots Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6">
-                    <MoreVertical className="h-3.5 w-3.5" />
+                  <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-accent/60">
+                    <MoreVertical className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
@@ -326,7 +326,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
           <CollapsibleContent>
             <div className="bg-muted/5 border-t border-border/10">
               {/* Columns List */}
-              <div className="py-1">
+              <div className="py-0.5">
                 {table.columns && table.columns.length > 0 ? (
                   table.columns.map((column, index) => (
                     <ColumnRow
@@ -341,41 +341,41 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                     />
                   ))
                 ) : (
-                  <div className="text-center py-6 text-xs text-muted-foreground">
+                  <div className="text-center py-4 text-xs text-muted-foreground">
                     No columns yet
                   </div>
                 )}
               </div>
 
               {/* Bottom Actions - DrawSQL Style */}
-              <div className="px-2.5 pb-2 pt-1.5 flex items-center gap-2 border-t border-border/20">
+              <div className="px-2 pb-1.5 pt-1 flex items-center gap-2 border-t border-border/10">
                 {/* Color Picker Button */}
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 hover:bg-accent/50"
+                      className="h-6 w-6 shrink-0 hover:bg-accent/50"
                       title="Change table color"
                     >
                       <div
-                        className="h-4 w-4 rounded border border-border/40 shadow-sm"
+                        className="h-3.5 w-3.5 rounded border border-border/30"
                         style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
                       />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-3 bg-popover/95 backdrop-blur-sm" align="start">
-                    <div className="grid grid-cols-4 gap-2">
+                  <PopoverContent className="w-auto p-2.5 bg-popover/95 backdrop-blur-sm" align="start">
+                    <div className="grid grid-cols-4 gap-1.5">
                       {COLORS.map((color) => (
                         <button
                           key={color}
                           type="button"
-                          className="h-8 w-8 rounded-md transition-all hover:scale-110 hover:shadow-md relative ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="h-7 w-7 rounded-md transition-all hover:scale-110 hover:shadow-md relative ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                           style={{ backgroundColor: color }}
                           onClick={() => updateTableColor(tableId, color)}
                         >
                           {table.color === color && (
-                            <Check className="h-4 w-4 absolute inset-0 m-auto text-white drop-shadow-lg" />
+                            <Check className="h-3.5 w-3.5 absolute inset-0 m-auto text-white drop-shadow-lg" />
                           )}
                         </button>
                       ))}
@@ -387,10 +387,10 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-7 text-xs font-medium border-border/50 hover:bg-accent/50 hover:border-border"
+                  className="flex-1 h-6 text-[11px] font-medium border-border/40 hover:bg-accent/50 hover:border-border/60"
                   onClick={handleAddColumn}
                 >
-                  <Plus className="h-3 w-3 mr-1.5" />
+                  <Plus className="h-3 w-3 mr-1" />
                   Add Column
                 </Button>
               </div>
@@ -448,27 +448,27 @@ function ColumnRow({
   const [typeOpen, setTypeOpen] = useState(false);
 
   return (
-    <div className="group flex items-center gap-1.5 px-2.5 py-1 hover:bg-muted/40 transition-colors">
+    <div className="group flex items-center gap-1.5 px-2 py-0.5 hover:bg-muted/30 transition-colors">
       {/* Drag Handle */}
       <button
         className="shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
         title="Drag to reorder"
       >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
 
       {/* Index Type Icon */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 hover:bg-accent/50">
+          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 hover:bg-accent/50">
             {indexType === 'primary_key' ? (
-              <Key className="h-3.5 w-3.5 text-amber-500" />
+              <Key className="h-3 w-3 text-amber-500" />
             ) : indexType === 'unique_key' ? (
-              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+              <Sparkles className="h-3 w-3 text-indigo-500" />
             ) : indexType === 'index' ? (
-              <Search className="h-3.5 w-3.5 text-violet-500" />
+              <Search className="h-3 w-3 text-violet-500" />
             ) : (
-              <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />
+              <Circle className="h-3 w-3 text-muted-foreground/30" />
             )}
           </Button>
         </DropdownMenuTrigger>
@@ -497,35 +497,35 @@ function ColumnRow({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Column Name Input - Larger & Cleaner */}
+      {/* Column Name Input - Subtle border */}
       <Input
         value={column.title}
         onChange={(e) => onUpdate({ title: e.target.value })}
-        className="h-7 flex-1 text-[13px] font-mono border-transparent hover:border-border/50 focus-visible:border-primary bg-transparent px-2 rounded-md"
+        className="h-6 flex-1 text-[12px] font-mono border-transparent hover:border-border/40 focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/20 bg-transparent px-1.5 rounded-sm"
         placeholder="column_name"
       />
 
-      {/* Data Type Combobox - Cleaner Styling */}
+      {/* Data Type Combobox - Subtle styling */}
       <Popover open={typeOpen} onOpenChange={setTypeOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
             aria-expanded={typeOpen}
-            className="h-7 w-[110px] justify-between text-[11px] font-mono px-2 bg-muted/30 border-border/40 hover:bg-muted/50 hover:border-border/60"
+            className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
           >
             <span className="truncate">{column.format || column.type || 'varchar'}</span>
-            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+            <ChevronsUpDown className="ml-1 h-2.5 w-2.5 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0 border-border/50 shadow-xl" align="end">
+        <PopoverContent className="w-[200px] p-0 border-border/40 shadow-lg" align="end">
           <Command className="bg-popover">
             <CommandInput
               placeholder="Search type..."
-              className="h-9 text-xs font-mono border-x-0 border-t-0 border-b border-border/30"
+              className="h-8 text-xs font-mono border-0"
             />
-            <CommandEmpty className="py-3 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
-            <CommandGroup className="max-h-[220px] overflow-auto p-1">
+            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
+            <CommandGroup className="max-h-[200px] overflow-auto p-1">
               {POSTGRES_TYPES.map((type) => (
                 <CommandItem
                   key={type}
@@ -534,11 +534,11 @@ function ColumnRow({
                     onUpdate({ format: type });
                     setTypeOpen(false);
                   }}
-                  className="text-xs font-mono aria-selected:bg-primary/10 aria-selected:text-primary rounded-sm py-2 px-2"
+                  className="text-xs font-mono aria-selected:bg-primary/10 aria-selected:text-primary rounded-sm py-1.5 px-2"
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-3.5 w-3.5 text-primary',
+                      'mr-2 h-3 w-3 text-primary',
                       (column.format || column.type) === type ? 'opacity-100' : 'opacity-0'
                     )}
                   />
@@ -550,14 +550,14 @@ function ColumnRow({
         </PopoverContent>
       </Popover>
 
-      {/* NULL/NOT NULL Chip - DrawSQL Style */}
+      {/* NULL/NOT NULL Chip - Subtle styling */}
       <button
         onClick={() => onUpdate({ required: !column.required })}
         className={cn(
-          'h-7 w-8 flex items-center justify-center text-[10px] font-bold rounded-md border transition-all shrink-0',
+          'h-6 w-7 flex items-center justify-center text-[10px] font-bold rounded border transition-all shrink-0',
           column.required
-            ? 'bg-primary/15 text-primary border-primary/30'
-            : 'bg-muted/40 text-muted-foreground/70 border-border/40 hover:bg-muted/60 hover:border-border/60'
+            ? 'bg-primary/10 text-primary border-primary/25'
+            : 'bg-muted/30 text-muted-foreground/60 border-border/30 hover:bg-muted/50 hover:border-border/50'
         )}
         title={column.required ? 'NOT NULL (click to allow NULL)' : 'Nullable (click to require)'}
       >
@@ -570,9 +570,9 @@ function ColumnRow({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
           >
-            <MoreVertical className="h-3.5 w-3.5" />
+            <MoreVertical className="h-3 w-3" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
