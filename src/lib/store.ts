@@ -34,6 +34,7 @@ interface AppState {
   updateTableName: (tableId: string, newName: string) => void;
   updateTableColor: (tableId: string, color: string) => void;
   updateTableComment: (tableId: string, comment: string) => void;
+  addTable: () => string;
   addColumn: (tableId: string, column: Column) => void;
   updateColumn: (tableId: string, columnIndex: number, updates: Partial<Column>) => void;
   deleteColumn: (tableId: string, columnIndex: number) => void;
@@ -522,6 +523,45 @@ export const useStore = create<AppState>((set, get) => {
       };
     });
     get().saveToLocalStorage();
+  },
+
+  addTable: () => {
+    const { tables, addTables, triggerFocusTable } = get();
+
+    const baseName = 'new_table';
+    let counter = 1;
+    let tableName = baseName;
+
+    while (tables[tableName]) {
+      tableName = `${baseName}_${counter}`;
+      counter += 1;
+    }
+
+    const newTable: TableState = {
+      [tableName]: {
+        title: tableName,
+        columns: [
+          {
+            title: 'id',
+            format: 'uuid',
+            type: 'string',
+            required: true,
+            pk: true,
+          },
+        ],
+        position: { x: 0, y: 0 },
+      },
+    };
+
+    addTables(newTable);
+
+    set((state) => ({
+      expandedTables: new Set(state.expandedTables).add(tableName),
+    }));
+
+    triggerFocusTable(tableName);
+
+    return tableName;
   },
 
   addColumn: (tableId, column) => {

@@ -24,7 +24,7 @@ import {
 } from '@dnd-kit/sortable';
 
 export function TableList() {
-  const { tables } = useStore();
+  const { tables, addTable } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
 
   const tableIds = useMemo(() => Object.keys(tables), [tables]);
@@ -54,6 +54,10 @@ export function TableList() {
       // TODO: Update table order in store
       console.log('Reorder:', arrayMove(filteredTableIds, oldIndex, newIndex));
     }
+  };
+
+  const handleAddTable = () => {
+    addTable();
   };
 
   return (
@@ -100,7 +104,7 @@ export function TableList() {
 
       {/* Add Table Button */}
       <div className="px-4 py-3 border-t border-border/50">
-        <Button className="w-full" size="sm">
+        <Button className="w-full" size="sm" onClick={handleAddTable}>
           <Plus className="h-4 w-4 mr-2" />
           Add Table
         </Button>
