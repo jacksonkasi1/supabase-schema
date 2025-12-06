@@ -16,14 +16,27 @@ import { toast } from 'sonner';
 
 // ** import ui components
 import { Button } from '@/components/ui/button';
-import { X, ArrowUp, Paperclip, MessageSquare, Trash2, Clipboard, Link } from 'lucide-react';
-import { Field, FieldLabel } from '@/components/ui/field';
 import {
-  InputGroup,
-  InputGroupTextarea,
-  InputGroupAddon,
-  InputGroupButton,
-} from '@/components/ui/input-group';
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectLabel,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  X,
+  ArrowUp,
+  Paperclip,
+  MessageSquare,
+  Trash2,
+  Clipboard,
+  Link,
+  Cloud,
+} from 'lucide-react';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -37,25 +50,85 @@ interface ChatSidebarProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+interface Model {
+  id: string;
+  name: string;
+  enabled?: boolean;
+}
+
 export function ChatSidebar({
   isOpen = false,
   onOpenChange,
 }: ChatSidebarProps) {
   const { tables, updateTablesFromAI, supabaseApiKey } = useStore();
-  const [aiProvider] = useLocalStorage<'openai' | 'google'>(
+  const [aiProvider, setAiProvider] = useLocalStorage<'openai' | 'google'>(
     'ai-provider',
-    'openai'
+    'openai',
   );
   const [openaiApiKey] = useLocalStorage<string>('ai-openai-key', '');
   const [googleApiKey] = useLocalStorage<string>('ai-google-key', '');
-  const [openaiModel] = useLocalStorage<string>(
+  const [openaiModel, setOpenaiModel] = useLocalStorage<string>(
     'ai-openai-model',
-    'gpt-4o-mini'
+    'gpt-4o-mini',
   );
-  const [googleModel] = useLocalStorage<string>(
+  const [googleModel, setGoogleModel] = useLocalStorage<string>(
     'ai-google-model',
-    'gemini-1.5-pro-latest'
+    'gemini-1.5-pro-latest',
   );
+
+  // Load models from local storage
+  const [openaiModels] = useLocalStorage<Model[]>('ai-openai-models', []);
+  const [googleModels] = useLocalStorage<Model[]>('ai-google-models', []);
+  const [customOpenaiModels] = useLocalStorage<string[]>(
+    'ai-custom-openai-models',
+    [],
+  );
+  const [customGoogleModels] = useLocalStorage<string[]>(
+    'ai-custom-google-models',
+    [],
+  );
+
+  // Combine built-in (if fetched) + custom + default fallback
+  const availableOpenaiModels = useMemo(() => {
+    // Filter out disabled models
+    const models = openaiModels.filter((m) => m.enabled !== false);
+
+    // Add custom models
+    customOpenaiModels.forEach((m) => {
+      if (!models.find((existing) => existing.id === m)) {
+        models.push({ id: m, name: m, enabled: true });
+      }
+    });
+    // Ensure default exists if list is empty
+    if (models.length === 0) {
+      models.push({ id: 'gpt-4o-mini', name: 'GPT-4o mini', enabled: true });
+      models.push({ id: 'gpt-4o', name: 'GPT-4o', enabled: true });
+    }
+    return models;
+  }, [openaiModels, customOpenaiModels]);
+
+  const availableGoogleModels = useMemo(() => {
+    const models = googleModels.filter((m) => m.enabled !== false);
+
+    customGoogleModels.forEach((m) => {
+      if (!models.find((existing) => existing.id === m)) {
+        models.push({ id: m, name: m, enabled: true });
+      }
+    });
+    if (models.length === 0) {
+      models.push({
+        id: 'gemini-1.5-pro-latest',
+        name: 'Gemini 1.5 Pro',
+        enabled: true,
+      });
+      models.push({
+        id: 'gemini-1.5-flash-latest',
+        name: 'Gemini 1.5 Flash',
+        enabled: true,
+      });
+    }
+    return models;
+  }, [googleModels, customGoogleModels]);
 
   const setIsOpen = (value: boolean) => {
     onOpenChange?.(value);
@@ -80,21 +153,20 @@ export function ChatSidebar({
           // schema is NOT included here - it's passed per message to avoid stale state
         },
       }),
-    [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel]
+    [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel],
   );
 
   // Log schema sent to API for debugging
   useEffect(() => {
-    console.log('[ChatSidebar] Current tables state:', Object.keys(tables).length, 'tables');
+    console.log(
+      '[ChatSidebar] Current tables state:',
+      Object.keys(tables).length,
+      'tables',
+    );
   }, [tables]);
 
   // Use Vercel AI SDK 5's useChat hook
-  const {
-    messages,
-    sendMessage,
-    status,
-    setMessages,
-  } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     id: 'sql-assistant',
     transport,
     onFinish: ({ message }) => {
@@ -158,11 +230,14 @@ export function ChatSidebar({
                 : `${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`,
           });
         } else {
-          console.warn('[onFinish] modifySchema tool found but no valid output:', {
-            hasOutput: !!output,
-            outputType: typeof output,
-            hasTables: output && 'tables' in output,
-          });
+          console.warn(
+            '[onFinish] modifySchema tool found but no valid output:',
+            {
+              hasOutput: !!output,
+              outputType: typeof output,
+              hasTables: output && 'tables' in output,
+            },
+          );
         }
       });
 
@@ -174,7 +249,7 @@ export function ChatSidebar({
 
       if (toolsExecuted > 0 && !schemaUpdated) {
         console.log(
-          '[onFinish] ⚠️ Tools executed but no schema updates detected'
+          '[onFinish] ⚠️ Tools executed but no schema updates detected',
         );
       }
     },
@@ -251,7 +326,9 @@ export function ChatSidebar({
     // This ensures we always send current state, even if React hasn't re-rendered yet
     const currentTables = useStore.getState().tables;
     const schemaTableCount = Object.keys(currentTables).length;
-    console.log(`[ChatSidebar] 📤 Sending message with ${schemaTableCount} tables in schema (fresh read)`);
+    console.log(
+      `[ChatSidebar] 📤 Sending message with ${schemaTableCount} tables in schema (fresh read)`,
+    );
 
     await sendMessage(
       { text: input },
@@ -262,8 +339,12 @@ export function ChatSidebar({
             name: file.name,
             type: file.type,
           })),
+          // Explicitly pass fresh config to ensure it overrides stale transport state
+          provider,
+          apiKey,
+          model: provider === 'google' ? googleModel : openaiModel,
         },
-      }
+      },
     );
 
     // Clear input and files after submission
@@ -293,6 +374,19 @@ export function ChatSidebar({
     fileInputRef.current?.click();
   };
 
+  const handleModelChange = (value: string) => {
+    // Check if it's an OpenAI model
+    if (availableOpenaiModels.some((m) => m.id === value)) {
+      setAiProvider('openai');
+      setOpenaiModel(value);
+    } else if (availableGoogleModels.some((m) => m.id === value)) {
+      setAiProvider('google');
+      setGoogleModel(value);
+    }
+  };
+
+  const currentModelValue = aiProvider === 'google' ? googleModel : openaiModel;
+
   return (
     <div
       className={cn(
@@ -301,7 +395,7 @@ export function ChatSidebar({
         'border-l border-border',
         'shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]',
         'transform transition-transform duration-300 ease-in-out',
-        isOpen ? 'translate-x-0' : 'translate-x-full'
+        isOpen ? 'translate-x-0' : 'translate-x-full',
       )}
     >
       {/* Header */}
@@ -349,7 +443,7 @@ export function ChatSidebar({
       </div>
 
       {/* Content */}
-      <div className="overflow-y-auto p-4 space-y-4 h-[calc(100vh-8rem)]">
+      <div className="overflow-y-auto p-4 space-y-4 h-[calc(100vh-10rem)]">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <MessageSquare size={48} className="mb-4 opacity-50" />
@@ -391,108 +485,121 @@ export function ChatSidebar({
                   /* Assistant response - simple rounded box */
                   <div className="flex justify-start">
                     <div className="bg-muted/50 rounded-2xl px-4 py-3 max-w-[85%] space-y-3">
-                        {/* Render text parts */}
-                        {message.parts.filter((p: any) => p.type === 'text').length > 0 ? (
-                          message.parts.map((part: any, partIndex: number) => {
-                            if (part.type === 'text') {
-                              return (
-                                <div key={partIndex} className="text-sm whitespace-pre-wrap">
-                                  {part.text || (
-                                    <span className="text-muted-foreground animate-pulse">
-                                      Thinking...
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return null;
-                          })
-                        ) : (
-                          <div className="text-sm text-muted-foreground italic">
-                            Tool executed (no text response generated)
-                          </div>
-                        )}
-
-                        {/* Show tool invocations if any */}
-                        {message.parts.some((p: any) => p.type === 'tool') && (
-                          <div className="space-y-1 text-xs text-muted-foreground">
-                            {message.parts
-                              .filter((part: any) => part.type === 'tool')
-                              .map((tool: any, toolIndex: number) => (
-                                <div
-                                  key={toolIndex}
-                                  className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
-                                >
-                                  <span
-                                    className={cn(
-                                      'inline-flex h-2 w-2 rounded-full',
-                                      tool.result
-                                        ? 'bg-emerald-500'
-                                        : 'bg-amber-500 animate-pulse'
-                                    )}
-                                  />
-                                  <span className="font-medium">{tool.toolName}</span>
-                                  <span className="capitalize text-muted-foreground">
-                                    {tool.result ? 'completed' : 'running'}
+                      {/* Render text parts */}
+                      {message.parts.filter((p: any) => p.type === 'text')
+                        .length > 0 ? (
+                        message.parts.map((part: any, partIndex: number) => {
+                          if (part.type === 'text') {
+                            return (
+                              <div
+                                key={partIndex}
+                                className="text-sm whitespace-pre-wrap"
+                              >
+                                {part.text || (
+                                  <span className="text-muted-foreground animate-pulse">
+                                    Thinking...
                                   </span>
-                                </div>
-                              ))}
-                          </div>
-                        )}
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })
+                      ) : (
+                        <div className="text-sm text-muted-foreground italic">
+                          Tool executed (no text response generated)
+                        </div>
+                      )}
 
-                        {/* Action buttons */}
-                        {message.parts.some((p: any) => p.type === 'text') && (
-                          <div className="flex items-center gap-2 pt-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="Copy"
-                              onClick={async () => {
-                                const textContent = message.parts
-                                  .filter((p: any) => p.type === 'text')
-                                  .map((p: any) => p.text)
-                                  .join('\n');
-                                await navigator.clipboard.writeText(textContent);
-                                toast.success('Copied to clipboard');
-                              }}
-                            >
-                              <Clipboard size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              title="Open SQL Editor"
-                              onClick={async () => {
-                                const textContent = message.parts
-                                  .filter((p: any) => p.type === 'text')
-                                  .map((p: any) => p.text)
-                                  .join('\n');
-                                await navigator.clipboard.writeText(textContent);
-                                try {
-                                  const projectRef = new URL(supabaseApiKey.url).hostname.split('.')[0];
-                                  window.open(`https://app.supabase.com/project/${projectRef}/sql`, '_blank');
-                                } catch (error) {
-                                  console.error('Failed to open SQL tab:', error);
-                                }
-                              }}
-                            >
-                              <Link size={16} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 ml-auto text-destructive hover:text-destructive"
-                              title="Remove"
-                              onClick={() => {
-                                setMessages(messages.filter((_, i) => i !== index));
-                              }}
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-                        )}
+                      {/* Show tool invocations if any */}
+                      {message.parts.some((p: any) => p.type === 'tool') && (
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          {message.parts
+                            .filter((part: any) => part.type === 'tool')
+                            .map((tool: any, toolIndex: number) => (
+                              <div
+                                key={toolIndex}
+                                className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
+                              >
+                                <span
+                                  className={cn(
+                                    'inline-flex h-2 w-2 rounded-full',
+                                    tool.result
+                                      ? 'bg-emerald-500'
+                                      : 'bg-amber-500 animate-pulse',
+                                  )}
+                                />
+                                <span className="font-medium">
+                                  {tool.toolName}
+                                </span>
+                                <span className="capitalize text-muted-foreground">
+                                  {tool.result ? 'completed' : 'running'}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      {message.parts.some((p: any) => p.type === 'text') && (
+                        <div className="flex items-center gap-2 pt-2 border-t">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="Copy"
+                            onClick={async () => {
+                              const textContent = message.parts
+                                .filter((p: any) => p.type === 'text')
+                                .map((p: any) => p.text)
+                                .join('\n');
+                              await navigator.clipboard.writeText(textContent);
+                              toast.success('Copied to clipboard');
+                            }}
+                          >
+                            <Clipboard size={16} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="Open SQL Editor"
+                            onClick={async () => {
+                              const textContent = message.parts
+                                .filter((p: any) => p.type === 'text')
+                                .map((p: any) => p.text)
+                                .join('\n');
+                              await navigator.clipboard.writeText(textContent);
+                              try {
+                                const projectRef = new URL(
+                                  supabaseApiKey.url,
+                                ).hostname.split('.')[0];
+                                window.open(
+                                  `https://app.supabase.com/project/${projectRef}/sql`,
+                                  '_blank',
+                                );
+                              } catch (error) {
+                                console.error('Failed to open SQL tab:', error);
+                              }
+                            }}
+                          >
+                            <Link size={16} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 ml-auto text-destructive hover:text-destructive"
+                            title="Remove"
+                            onClick={() => {
+                              setMessages(
+                                messages.filter((_, i) => i !== index),
+                              );
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -509,7 +616,7 @@ export function ChatSidebar({
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50">
+      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50 bg-background/95 backdrop-blur-xl">
         {/* Selected Files */}
         {selectedFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
@@ -537,68 +644,103 @@ export function ChatSidebar({
 
         {/* Input Form */}
         <TooltipProvider>
-          <form onSubmit={onSubmit}>
-            <Field>
-              <FieldLabel htmlFor="chat-input" className="sr-only">
-                Chat Input
-              </FieldLabel>
-              <InputGroup>
-                <InputGroupTextarea
-                  id="chat-input"
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask, search, or make anything..."
-                  rows={3}
-                  disabled={isLoading}
+          <form
+            onSubmit={onSubmit}
+            className="relative flex min-h-[120px] flex-col rounded-2xl border border-border shadow-lg bg-card focus-within:ring-1 focus-within:ring-ring transition-all duration-200"
+          >
+            <div className="flex-1 relative overflow-y-auto max-h-[200px]">
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask, search, or make anything..."
+                className="w-full border-0 p-3 shadow-none ring-0 ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none bg-transparent min-h-[80px] text-[15px]"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 p-2 pb-2 mt-auto">
+              <Select
+                value={currentModelValue}
+                onValueChange={handleModelChange}
+              >
+                <SelectTrigger className="h-8 border border-input bg-background rounded-full pl-3 pr-1 py-1.5 text-xs text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground focus:ring-0 focus:ring-offset-0 transition-colors gap-1.5 w-auto inline-flex items-center justify-between">
+                  <SelectValue className="text-sm" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableOpenaiModels.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
+                        OpenAI
+                      </SelectLabel>
+                      {availableOpenaiModels.map((m) => (
+                        <SelectItem key={`openai-${m.id}`} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {availableGoogleModels.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
+                        Google
+                      </SelectLabel>
+                      {availableGoogleModels.map((m) => (
+                        <SelectItem key={`google-${m.id}`} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+
+              <div className="ml-auto flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.sql,.txt"
+                  onChange={handleFileSelect}
+                  className="hidden"
                 />
-                <InputGroupAddon align="block-end" className="gap-1">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,.sql,.txt"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <InputGroupButton
-                        type="button"
-                        size="icon"
-                        className="rounded-full h-8 w-8"
-                        aria-label="Attach file"
-                        onClick={handleFileButtonClick}
-                        disabled={isLoading}
-                      >
-                        <Paperclip size={16} />
-                      </InputGroupButton>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Attach file or image</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <InputGroupButton
-                        type="submit"
-                        aria-label="Send"
-                        className="rounded-full h-8 w-8"
-                        variant="default"
-                        size="icon"
-                        disabled={isLoading || !input.trim()}
-                      >
-                        <ArrowUp size={16} />
-                      </InputGroupButton>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Send message</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </InputGroupAddon>
-              </InputGroup>
-            </Field>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={handleFileButtonClick}
+                      disabled={isLoading}
+                    >
+                      <Paperclip size={18} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Attach file</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className={cn(
+                        'h-8 w-8 rounded-full transition-all duration-200',
+                        input.trim()
+                          ? 'bg-primary text-primary-foreground shadow-md'
+                          : 'bg-muted text-muted-foreground',
+                      )}
+                      disabled={isLoading || !input.trim()}
+                    >
+                      <ArrowUp size={16} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Send message</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
           </form>
         </TooltipProvider>
       </div>

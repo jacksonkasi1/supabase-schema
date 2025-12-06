@@ -38,6 +38,7 @@ interface AppState {
   updateColumn: (tableId: string, columnIndex: number, updates: Partial<Column>) => void;
   deleteColumn: (tableId: string, columnIndex: number) => void;
   deleteTable: (tableId: string) => void;
+  reorderTables: (orderedIds: string[]) => void;
   autoArrange: () => void;
 
   // Layout trigger for ReactFlow
@@ -597,6 +598,26 @@ export const useStore = create<AppState>((set, get) => {
         tables: newTables,
         expandedTables: newExpanded,
       };
+    });
+    get().saveToLocalStorage();
+  },
+
+  reorderTables: (orderedIds) => {
+    set((state) => {
+      const newTables: TableState = {};
+      // Rebuild tables object in the new order
+      orderedIds.forEach((id) => {
+        if (state.tables[id]) {
+          newTables[id] = state.tables[id];
+        }
+      });
+      // Add any tables that weren't in orderedIds (shouldn't happen, but safe)
+      Object.keys(state.tables).forEach((id) => {
+        if (!newTables[id]) {
+          newTables[id] = state.tables[id];
+        }
+      });
+      return { tables: newTables };
     });
     get().saveToLocalStorage();
   },
