@@ -1,5 +1,3 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -15,7 +13,6 @@ export async function POST(req: Request) {
     let models: { id: string; name: string }[] = [];
 
     if (provider === 'openai') {
-      const openai = createOpenAI({ apiKey });
       // The AI SDK doesn't directly expose a "list models" function that returns the raw list easily 
       // without using the raw SDK or fetch. Let's use fetch for the raw list to be safe and lightweight.
       
