@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { TableState } from '@/lib/types';
-import { generateSchemaSQL, generateTableSQL, parseSchemaSQL } from '@/lib/schema-sql';
+import {
+  generateSchemaSQL,
+  generateTableSQL,
+  parseSchemaSQL,
+} from '@/lib/schema-sql';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
@@ -79,8 +83,8 @@ export function SchemaSidebarSql() {
       nextTables[tableId] = tableValue;
     });
 
-    const preservedPosition =
-      tables[selectedTable]?.position ?? newTable.position ?? { x: 0, y: 0 };
+    const preservedPosition = tables[selectedTable]?.position ??
+      newTable.position ?? { x: 0, y: 0 };
 
     nextTables[newKey] = {
       ...newTable,
@@ -111,15 +115,15 @@ export function SchemaSidebarSql() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-2 py-2 border-b border-border/50">
+      <div className="px-4 py-3 border-b border-border/50">
         <Select value={selectedTable} onValueChange={setSelectedTable}>
-          <SelectTrigger className="h-7 text-xs bg-muted/30 border-border/50">
+          <SelectTrigger className="h-9 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__" className="text-xs">Whole schema</SelectItem>
+            <SelectItem value="__all__">Whole schema</SelectItem>
             {tableIds.map((id) => (
-              <SelectItem key={id} value={id} className="text-xs">
+              <SelectItem key={id} value={id}>
                 {tables[id]?.title || id}
               </SelectItem>
             ))}
@@ -128,30 +132,35 @@ export function SchemaSidebarSql() {
       </div>
 
       {/* Editor */}
-      <div className="flex-1 p-2 overflow-hidden">
+      <div className="flex-1 p-0 overflow-hidden">
         <Textarea
           value={sql}
           onChange={(e) => setSql(e.target.value)}
-          className="w-full h-full font-mono text-[10px] bg-muted/20 border-border/50 resize-none"
+          className="w-full h-full font-mono text-xs bg-muted/20 border-0 resize-none rounded-none focus-visible:ring-0 p-4"
           placeholder="CREATE TABLE ..."
         />
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mx-2 mb-2 p-2 bg-destructive/10 border border-destructive/30 rounded text-[10px] text-destructive flex items-start gap-2">
-          <AlertCircle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+        <div className="mx-4 mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded text-xs text-destructive flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Actions */}
-      <div className="px-2 py-2 border-t border-border/50 flex gap-2">
-        <Button onClick={handleApply} size="sm" className="flex-1 h-7 text-xs">
+      <div className="px-4 py-3 border-t border-border/50 flex gap-2">
+        <Button onClick={handleApply} size="sm" className="flex-1">
           Apply SQL
         </Button>
-        <Button onClick={handleReset} variant="outline" size="sm" className="h-7 px-2">
-          <RotateCcw className="h-3 w-3" />
+        <Button
+          onClick={handleReset}
+          variant="outline"
+          size="sm"
+          className="px-3"
+        >
+          <RotateCcw className="h-4 w-4" />
         </Button>
       </div>
     </div>
