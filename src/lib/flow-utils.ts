@@ -1,6 +1,12 @@
+// ** import types
 import { Table, TableState } from './types';
 import { FlowNode, FlowEdge, RelationshipType } from '@/types/flow';
+
+// ** import core packages
 import { MarkerType } from '@xyflow/react';
+
+// ** import utils
+import { debugLog } from './debug';
 
 /**
  * Convert table state to ReactFlow nodes
@@ -30,21 +36,21 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
 export function tablesToEdges(tables: TableState): FlowEdge[] {
   const edges: FlowEdge[] = [];
 
-  console.log('[tablesToEdges] Processing tables:', Object.keys(tables));
+  debugLog.log('[tablesToEdges] Processing tables:', Object.keys(tables));
 
   Object.values(tables).forEach((table) => {
     if (!table.columns) return;
 
     table.columns.forEach((column, sourceIndex) => {
       if (column.fk) {
-        console.log(
+        debugLog.log(
           `[tablesToEdges] Found FK: ${table.title}.${column.title} -> ${column.fk}`,
         );
         // Parse FK format: "schema.table.column" or "table.column"
         const fkParts = column.fk.split('.');
 
         if (fkParts.length < 2) {
-          console.warn(
+          debugLog.warn(
             `Invalid FK format for column ${column.title} in table ${table.title}: ${column.fk}`,
           );
           return;
@@ -78,7 +84,7 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
           ) ?? -1;
 
         if (targetIndex === -1) {
-          console.warn(
+          debugLog.warn(
             `Target column ${targetColumn} not found in table ${targetTableKey}`,
           );
           return;
@@ -109,7 +115,7 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
           },
         };
 
-        console.log('[tablesToEdges] Creating edge:', {
+        debugLog.log('[tablesToEdges] Creating edge:', {
           id: edgeId,
           source: table.title,
           target: targetTableKey,
@@ -122,7 +128,7 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
     });
   });
 
-  console.log(
+  debugLog.log(
     `[tablesToEdges] Total edges created: ${edges.length}`,
     edges.map((e) => e.id),
   );

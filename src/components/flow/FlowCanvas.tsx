@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { Lock, Unlock } from 'lucide-react';
 import { Table, TableState } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { debugLog } from '@/lib/debug';
 
 const nodeTypes = {
   table: ModernTableNode,
@@ -120,9 +121,23 @@ const isInputLikeElement = (target: EventTarget | null): boolean => {
 /**
  * Get the type category for a PostgreSQL data type.
  * Types in the same category are compatible for FK relationships.
+ *
+ * NOTE: Unknown/empty types return an empty category string and emit a dev-only
+ * warning. Callers (e.g. `areTypesCompatible`) should treat empty categories as
+ * incompatible in strict mode unless the raw types are exactly equal.
  */
 const getTypeCategory = (type: string): string => {
-  const t = (type || '').toLowerCase().trim();
+  const rawType = (type || '').trim();
+
+  // Guard: no discernible type
+  if (!rawType) {
+    debugLog.warn(
+      '[FlowCanvas] getTypeCategory called with empty/unknown type',
+    );
+    return '';
+  }
+
+  const t = rawType.toLowerCase();
 
   // UUID type
   if (t === 'uuid') return 'uuid';
@@ -222,6 +237,10 @@ const getTypeCategory = (type: string): string => {
 /**
  * Check if two PostgreSQL types are compatible for FK relationships.
  * In strict mode, types must be in the same category.
+ *
+ * Conservative behavior for unknown types:
+ * - If either category is empty (unknown) and types don't match exactly, they're incompatible
+ * - This prevents accidental connections between columns with missing type information
  */
 const areTypesCompatible = (
   sourceType: string,
@@ -229,6 +248,20 @@ const areTypesCompatible = (
 ): boolean => {
   const sourceCategory = getTypeCategory(sourceType);
   const targetCategory = getTypeCategory(targetType);
+
+  // Guard: if either category is unknown (empty) and types don't match exactly, incompatible
+  if (sourceCategory === '' || targetCategory === '') {
+    // Only allow if raw types are exactly equal
+    const isExactMatch =
+      sourceType.trim().toLowerCase() === targetType.trim().toLowerCase();
+    if (!isExactMatch) {
+      debugLog.warn(
+        '[FlowCanvas] Type compatibility denied due to unknown category',
+        { sourceType, targetType, sourceCategory, targetCategory },
+      );
+    }
+    return isExactMatch;
+  }
 
   // Same category = compatible
   if (sourceCategory === targetCategory) return true;
@@ -342,7 +375,7 @@ function FlowCanvasInner() {
   useEffect(() => {
     // Use setTimeout(0) to yield to browser rendering, preventing UI freeze
     const timeoutId = setTimeout(() => {
-      console.log('[FlowCanvas] Converting tables to nodes/edges...', {
+      debugLog.log('[FlowCanvas] Converting tables to nodes/edges...', {
         tableCount: Object.keys(tables).length,
         visibleSchemasSize: visibleSchemas.size,
         visibleSchemas: Array.from(visibleSchemas),
@@ -421,12 +454,12 @@ function FlowCanvasInner() {
           } as FlowEdge;
         });
 
-      console.log(
+      debugLog.log(
         `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`,
       );
       setNodes(nodesWithUniqueIds);
       setEdges(flowEdges);
-      console.log('[FlowCanvas] Nodes/edges set');
+      debugLog.log('[FlowCanvas] Nodes/edges set');
 
       // Reset pending flag if tables are empty
       if (nodesWithUniqueIds.length === 0) {
@@ -445,7 +478,7 @@ function FlowCanvasInner() {
         isApplyingLayoutRef.current = true;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            console.log('[FlowCanvas] Auto-triggering layout after nodes set');
+            debugLog.log('[FlowCanvas] Auto-triggering layout after nodes set');
             const layoutedNodes = getLayoutedNodesWithSchemas(
               nodesWithUniqueIds,
               flowEdges,
@@ -499,7 +532,7 @@ function FlowCanvasInner() {
 
       if (nodes.length > 0 && edges.length > 0) {
         // Nodes are ready, layout immediately
-        console.log('[FlowCanvas] Layout triggered, nodes ready');
+        debugLog.log('[FlowCanvas] Layout triggered, nodes ready');
         isApplyingLayoutRef.current = true;
 
         // Use requestAnimationFrame to ensure we're not blocking
@@ -534,7 +567,7 @@ function FlowCanvasInner() {
         });
       } else {
         // Nodes not ready yet, mark as pending
-        console.log(
+        debugLog.log(
           '[FlowCanvas] Layout triggered but nodes not ready, marking as pending',
         );
         pendingLayoutRef.current = true;
@@ -902,7 +935,7 @@ function FlowCanvasInner() {
 
   // Handle multiple nodes drag
   const onNodesDelete = useCallback((deleted: any[]) => {
-    console.log('Nodes deleted:', deleted);
+    debugLog.log('Nodes deleted:', deleted);
   }, []);
 
   // Track connection start to show handles on all nodes
@@ -917,7 +950,7 @@ function FlowCanvasInner() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      console.log('[onConnect] Connection attempt:', {
+      debugLog.log('[onConnect] Connection attempt:', {
         source: params.source,
         target: params.target,
         sourceHandle: params.sourceHandle,
@@ -929,7 +962,7 @@ function FlowCanvasInner() {
         params.source === params.target &&
         params.sourceHandle === params.targetHandle
       ) {
-        console.log('[onConnect] Blocked: self-column connection');
+        debugLog.log('[onConnect] Blocked: self-column connection');
         toast.error('Cannot connect column to itself', {
           description: 'A column cannot reference itself',
           position: 'bottom-center',
@@ -965,7 +998,7 @@ function FlowCanvasInner() {
             const targetType = targetColumn?.format || targetColumn?.type || '';
             const isTypeCompatible = areTypesCompatible(sourceType, targetType);
 
-            console.log('[onConnect] Strict mode check:', {
+            debugLog.log('[onConnect] Strict mode check:', {
               sourceColumn: sourceColumn?.title,
               targetColumn: targetColumn?.title,
               sourceType,
@@ -1024,7 +1057,7 @@ function FlowCanvasInner() {
         const src = parseHandle(params.sourceHandle, params.source);
         const tgt = parseHandle(params.targetHandle, params.target);
 
-        console.log('[onConnect] Parsed handles:', { src, tgt });
+        debugLog.log('[onConnect] Parsed handles:', { src, tgt });
 
         if (
           src &&
@@ -1034,7 +1067,7 @@ function FlowCanvasInner() {
         ) {
           // Persist FK on the source column so tablesToEdges will regenerate this relationship
           const fkValue = `${tgt.table}.${tgt.col}`;
-          console.log('[onConnect] Creating FK:', {
+          debugLog.log('[onConnect] Creating FK:', {
             sourceTable: src.table,
             sourceCol: src.col,
             sourceIndex: src.index,
@@ -1403,8 +1436,8 @@ function FlowCanvasInner() {
           }`}
           title={
             connectionMode === 'flexible'
-              ? 'Flex Mode: Any column can connect to any column. Click to switch to Strict Mode.'
-              : 'Strict Mode: Only FK columns can start connections. Click to switch to Flex Mode.'
+              ? 'Flexible Mode: Any column can connect to any column. Click to switch to Strict Mode.'
+              : 'Strict Mode: Only type-compatible columns can connect. Click to switch to Flexible Mode.'
           }
         >
           {connectionMode === 'flexible' ? (

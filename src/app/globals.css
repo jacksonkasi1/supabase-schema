@@ -82,11 +82,6 @@
     textarea {
         @apply transition-colors duration-150 ease-out;
     }
-
-    /* Better focus states */
-    *:focus-visible {
-        @apply outline-none;
-    }
 }
 
 @font-face {
