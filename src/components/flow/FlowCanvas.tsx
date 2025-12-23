@@ -29,6 +29,7 @@ import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
+import { Lock, Unlock } from 'lucide-react';
 import { Table, TableState } from '@/lib/types';
 
 const nodeTypes = {
@@ -156,13 +157,13 @@ function FlowCanvasInner() {
   const deletedEdgesRef = useRef<Set<string>>(new Set());
 
   // Connection mode with localStorage persistence
-  const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(
+  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>(
     () => {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('connection-mode');
-        return (saved as 'strict' | 'flexible') || 'strict';
+        return (saved as 'strict' | 'flexible') || 'flexible';
       }
-      return 'strict';
+      return 'flexible';
     },
   );
 
@@ -263,11 +264,11 @@ function FlowCanvasInner() {
           const markerStart =
             relationshipType === 'many-to-many'
               ? {
-                  type: MarkerType.ArrowClosed,
-                  width: 20,
-                  height: 20,
-                  color: '#6B7280',
-                }
+                type: MarkerType.ArrowClosed,
+                width: 20,
+                height: 20,
+                color: '#6B7280',
+              }
               : undefined;
 
           // Ensure edge.data exists and has required properties
@@ -554,8 +555,7 @@ function FlowCanvasInner() {
     copiedSelectionRef.current = { tables: copiedTables, center };
     pasteOffsetRef.current = 0;
     toast.success(
-      `Copied ${copiedTables.length} table${
-        copiedTables.length === 1 ? '' : 's'
+      `Copied ${copiedTables.length} table${copiedTables.length === 1 ? '' : 's'
       }`,
     );
     return true;
@@ -819,9 +819,14 @@ function FlowCanvasInner() {
   // Validate connections based on connection mode
   const isValidConnection = useCallback(
     (connection: Edge | Connection) => {
-      if (connection.source === connection.target) {
-        toast.error('Cannot connect to self', {
-          description: 'A table cannot have a relationship with itself',
+      // Allow self-referencing tables (valid DB pattern like manager_id → id)
+      // But block connecting a column to itself (meaningless)
+      if (
+        connection.source === connection.target &&
+        connection.sourceHandle === connection.targetHandle
+      ) {
+        toast.error('Cannot connect column to itself', {
+          description: 'A column cannot reference itself',
           position: 'bottom-center',
           duration: 2000,
         });
@@ -958,21 +963,21 @@ function FlowCanvasInner() {
           eds.map((edge) =>
             edge.id === selectedEdge.id
               ? {
-                  ...edge,
-                  markerStart:
-                    type === 'many-to-many'
-                      ? {
-                          type: MarkerType.ArrowClosed,
-                          width: 20,
-                          height: 20,
-                          color: '#6B7280',
-                        }
-                      : undefined,
-                  data: {
-                    ...edge.data,
-                    relationshipType: type,
-                  },
-                }
+                ...edge,
+                markerStart:
+                  type === 'many-to-many'
+                    ? {
+                      type: MarkerType.ArrowClosed,
+                      width: 20,
+                      height: 20,
+                      color: '#6B7280',
+                    }
+                    : undefined,
+                data: {
+                  ...edge.data,
+                  relationshipType: type,
+                },
+              }
               : edge,
           ),
         );
@@ -1137,6 +1142,26 @@ function FlowCanvasInner() {
           nodeClassName="!fill-warm-gray-300 dark:!fill-dark-700"
         />
       </ReactFlow>
+
+      {/* Connection Mode Toggle */}
+      <div className="absolute bottom-28 left-4 z-10">
+        <button
+          onClick={() => setConnectionMode(prev => prev === 'flexible' ? 'strict' : 'flexible')}
+          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${connectionMode === 'flexible'
+            ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+            : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+            }`}
+          title={connectionMode === 'flexible'
+            ? 'Flex Mode: Any column can connect to any column. Click to switch to Strict Mode.'
+            : 'Strict Mode: Only FK columns can start connections. Click to switch to Flex Mode.'}
+        >
+          {connectionMode === 'flexible' ? (
+            <Unlock size={18} />
+          ) : (
+            <Lock size={18} />
+          )}
+        </button>
+      </div>
 
       {/* Relationship Selector */}
       {selectedEdge && (
