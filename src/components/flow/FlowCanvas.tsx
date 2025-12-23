@@ -117,6 +117,133 @@ const isInputLikeElement = (target: EventTarget | null): boolean => {
   );
 };
 
+/**
+ * Get the type category for a PostgreSQL data type.
+ * Types in the same category are compatible for FK relationships.
+ */
+const getTypeCategory = (type: string): string => {
+  const t = (type || '').toLowerCase().trim();
+
+  // UUID type
+  if (t === 'uuid') return 'uuid';
+
+  // Integer types (all compatible with each other)
+  if (
+    t === 'integer' ||
+    t === 'int' ||
+    t === 'int4' ||
+    t === 'smallint' ||
+    t === 'int2' ||
+    t === 'bigint' ||
+    t === 'int8' ||
+    t === 'serial' ||
+    t === 'smallserial' ||
+    t === 'bigserial' ||
+    t.includes('serial')
+  ) {
+    return 'integer';
+  }
+
+  // Numeric/decimal types
+  if (
+    t === 'numeric' ||
+    t === 'decimal' ||
+    t.startsWith('numeric(') ||
+    t.startsWith('decimal(')
+  ) {
+    return 'numeric';
+  }
+
+  // Floating point types
+  if (
+    t === 'real' ||
+    t === 'float4' ||
+    t === 'double precision' ||
+    t === 'float8' ||
+    t.startsWith('float')
+  ) {
+    return 'float';
+  }
+
+  // String types (varchar, char, text are compatible)
+  if (
+    t === 'text' ||
+    t === 'varchar' ||
+    t === 'char' ||
+    t === 'character' ||
+    t === 'character varying' ||
+    t.startsWith('varchar(') ||
+    t.startsWith('char(') ||
+    t.startsWith('character(') ||
+    t.startsWith('character varying(')
+  ) {
+    return 'string';
+  }
+
+  // Boolean type
+  if (t === 'boolean' || t === 'bool') return 'boolean';
+
+  // Date type
+  if (t === 'date') return 'date';
+
+  // Time types (time with/without timezone)
+  if (t === 'time' || t.startsWith('time ') || t === 'timetz') return 'time';
+
+  // Timestamp types (timestamp with/without timezone)
+  if (
+    t === 'timestamp' ||
+    t === 'timestamptz' ||
+    t.startsWith('timestamp ') ||
+    t === 'timestamp with time zone' ||
+    t === 'timestamp without time zone'
+  ) {
+    return 'timestamp';
+  }
+
+  // JSON types (json and jsonb are compatible)
+  if (t === 'json' || t === 'jsonb') return 'json';
+
+  // Bytea (binary)
+  if (t === 'bytea') return 'bytea';
+
+  // Array types - extract base type
+  if (t.endsWith('[]')) {
+    const baseType = t.slice(0, -2);
+    return `array:${getTypeCategory(baseType)}`;
+  }
+
+  // Enum types - return as-is for exact matching
+  if (t === 'enum') return 'enum';
+
+  // For unknown types, return as-is (will require exact match)
+  return t;
+};
+
+/**
+ * Check if two PostgreSQL types are compatible for FK relationships.
+ * In strict mode, types must be in the same category.
+ */
+const areTypesCompatible = (
+  sourceType: string,
+  targetType: string,
+): boolean => {
+  const sourceCategory = getTypeCategory(sourceType);
+  const targetCategory = getTypeCategory(targetType);
+
+  // Same category = compatible
+  if (sourceCategory === targetCategory) return true;
+
+  // Special case: integer and numeric can reference each other (common pattern)
+  if (
+    (sourceCategory === 'integer' && targetCategory === 'numeric') ||
+    (sourceCategory === 'numeric' && targetCategory === 'integer')
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 function FlowCanvasInner() {
   const {
     tables,
@@ -832,29 +959,25 @@ function FlowCanvasInner() {
               },
             );
 
-            // In strict mode, validate type compatibility
-            const sourceType = sourceColumn?.type?.toLowerCase() || '';
-            const targetType = targetColumn?.type?.toLowerCase() || '';
-
-            // Check if types are compatible (same type, or both are id-like types)
-            const isTypeCompatible =
-              sourceType === targetType ||
-              (sourceType.includes('uuid') && targetType.includes('uuid')) ||
-              (sourceType.includes('int') && targetType.includes('int')) ||
-              (sourceType.includes('serial') && targetType.includes('int')) ||
-              (sourceType.includes('int') && targetType.includes('serial'));
+            // In strict mode, validate type compatibility using category matching
+            // Use format first (contains PostgreSQL type like uuid, varchar) instead of type (generic like string, number)
+            const sourceType = sourceColumn?.format || sourceColumn?.type || '';
+            const targetType = targetColumn?.format || targetColumn?.type || '';
+            const isTypeCompatible = areTypesCompatible(sourceType, targetType);
 
             console.log('[onConnect] Strict mode check:', {
               sourceColumn: sourceColumn?.title,
               targetColumn: targetColumn?.title,
               sourceType,
               targetType,
+              sourceCategory: getTypeCategory(sourceType),
+              targetCategory: getTypeCategory(targetType),
               isTypeCompatible,
             });
 
             if (!isTypeCompatible) {
               toast.error('Type mismatch', {
-                description: `In strict mode, column types must be compatible. ${sourceType} cannot reference ${targetType}`,
+                description: `Cannot connect ${sourceType || 'unknown'} to ${targetType || 'unknown'}. Types must be compatible.`,
                 position: 'bottom-center',
                 duration: 2500,
               });
@@ -976,19 +1099,12 @@ function FlowCanvasInner() {
 
       if (!sourceColumn || !targetColumn) return false;
 
-      // Check type compatibility
-      const sourceType = sourceColumn.type?.toLowerCase() || '';
-      const targetType = targetColumn.type?.toLowerCase() || '';
+      // Check type compatibility using category matching
+      // Use format first (contains PostgreSQL type like uuid, varchar) instead of type (generic like string, number)
+      const sourceType = sourceColumn.format || sourceColumn.type || '';
+      const targetType = targetColumn.format || targetColumn.type || '';
 
-      // Types are compatible if they match or are both id-like types
-      const isTypeCompatible =
-        sourceType === targetType ||
-        (sourceType.includes('uuid') && targetType.includes('uuid')) ||
-        (sourceType.includes('int') && targetType.includes('int')) ||
-        (sourceType.includes('serial') && targetType.includes('int')) ||
-        (sourceType.includes('int') && targetType.includes('serial'));
-
-      return isTypeCompatible;
+      return areTypesCompatible(sourceType, targetType);
     },
     [connectionMode, nodes],
   );
