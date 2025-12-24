@@ -292,6 +292,7 @@ function FlowCanvasInner() {
     focusTableTrigger,
     visibleSchemas,
     expandTable,
+    deleteTable,
   } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -428,11 +429,11 @@ function FlowCanvasInner() {
           const markerStart =
             relationshipType === 'many-to-many'
               ? {
-                  type: MarkerType.ArrowClosed,
-                  width: 20,
-                  height: 20,
-                  color: '#6B7280',
-                }
+                type: MarkerType.ArrowClosed,
+                width: 20,
+                height: 20,
+                color: '#6B7280',
+              }
               : undefined;
 
           // Ensure edge.data exists and has required properties
@@ -719,8 +720,7 @@ function FlowCanvasInner() {
     copiedSelectionRef.current = { tables: copiedTables, center };
     pasteOffsetRef.current = 0;
     toast.success(
-      `Copied ${copiedTables.length} table${
-        copiedTables.length === 1 ? '' : 's'
+      `Copied ${copiedTables.length} table${copiedTables.length === 1 ? '' : 's'
       }`,
     );
     return true;
@@ -863,31 +863,8 @@ function FlowCanvasInner() {
         }
       }
 
-      // Delete / Backspace: Remove selected nodes
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (isInputField) return;
-        setNodes((nds) => {
-          const hasSelection = nds.some((node) => node.selected);
-          if (hasSelection) {
-            event.preventDefault();
-            const selectedNodeIds = nds
-              .filter((node) => node.selected)
-              .map((node) => node.id);
-
-            // Remove edges connected to deleted nodes
-            setEdges((eds) =>
-              eds.filter(
-                (edge) =>
-                  !selectedNodeIds.includes(edge.source) &&
-                  !selectedNodeIds.includes(edge.target),
-              ),
-            );
-
-            return nds.filter((node) => !node.selected);
-          }
-          return nds;
-        });
-      }
+      // Delete / Backspace: Let ReactFlow handle this via onNodesDelete callback
+      // (ReactFlow's built-in delete handling triggers onNodesDelete which calls deleteTable)
 
       // Space: Fit view (ignore when typing)
       if (event.code === 'Space') {
@@ -933,10 +910,26 @@ function FlowCanvasInner() {
     [updateTablePosition],
   );
 
-  // Handle multiple nodes drag
-  const onNodesDelete = useCallback((deleted: any[]) => {
-    debugLog.log('Nodes deleted:', deleted);
-  }, []);
+  // Handle node deletion from ReactFlow (keyboard Delete/Backspace triggers this)
+  const onNodesDelete = useCallback(
+    (deleted: any[]) => {
+      // Delete tables from store (this persists the deletion)
+      deleted.forEach((node) => {
+        deleteTable(node.id);
+      });
+
+      if (deleted.length > 0) {
+        toast.success(
+          `Deleted ${deleted.length} table${deleted.length > 1 ? 's' : ''}`,
+          {
+            position: 'bottom-center',
+            duration: 2000,
+          },
+        );
+      }
+    },
+    [deleteTable],
+  );
 
   // Track connection start to show handles on all nodes
   const onConnectStart = useCallback(() => {
@@ -1239,21 +1232,21 @@ function FlowCanvasInner() {
           eds.map((edge) =>
             edge.id === selectedEdge.id
               ? {
-                  ...edge,
-                  markerStart:
-                    type === 'many-to-many'
-                      ? {
-                          type: MarkerType.ArrowClosed,
-                          width: 20,
-                          height: 20,
-                          color: '#6B7280',
-                        }
-                      : undefined,
-                  data: {
-                    ...edge.data,
-                    relationshipType: type,
-                  },
-                }
+                ...edge,
+                markerStart:
+                  type === 'many-to-many'
+                    ? {
+                      type: MarkerType.ArrowClosed,
+                      width: 20,
+                      height: 20,
+                      color: '#6B7280',
+                    }
+                    : undefined,
+                data: {
+                  ...edge.data,
+                  relationshipType: type,
+                },
+              }
               : edge,
           ),
         );
@@ -1429,11 +1422,10 @@ function FlowCanvasInner() {
               prev === 'flexible' ? 'strict' : 'flexible',
             )
           }
-          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${
-            connectionMode === 'flexible'
-              ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
-              : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
-          }`}
+          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${connectionMode === 'flexible'
+            ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+            : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+            }`}
           title={
             connectionMode === 'flexible'
               ? 'Flexible Mode: Any column can connect to any column. Click to switch to Strict Mode.'
