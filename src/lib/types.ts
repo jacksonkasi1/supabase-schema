@@ -1,3 +1,30 @@
+// ============================================================================
+// Operation History Types for Undo/Redo Support (Phase 5.2)
+// ============================================================================
+
+/**
+ * Record of a schema operation for undo/redo capability
+ */
+export interface OperationRecord {
+  id: string;
+  type:
+    | 'createTable'
+    | 'dropTable'
+    | 'renameTable'
+    | 'addColumn'
+    | 'dropColumn'
+    | 'alterColumn';
+  tableId: string;
+  before: Table | null;
+  after: Table | null;
+  timestamp: number;
+  description: string;
+}
+
+// ============================================================================
+// Schema Types
+// ============================================================================
+
 export interface Column {
   title: string;
   format: string;
@@ -142,6 +169,14 @@ export interface StreamingNotification {
  * Union type for all streaming data parts
  * Used with AI SDK's createUIMessageStream and onData callback
  */
+/**
+ * Operation history batch for undo/redo support
+ */
+export interface StreamingOperationHistory {
+  operations: OperationRecord[];
+  canUndo: boolean;
+}
+
 export type StreamingDataPart =
   | { type: 'data-progress'; data: StreamingProgress; transient?: boolean }
   | { type: 'data-tables-batch'; data: StreamingTablesBatch; id?: string }
@@ -149,6 +184,10 @@ export type StreamingDataPart =
       type: 'data-notification';
       data: StreamingNotification;
       transient?: boolean;
+    }
+  | {
+      type: 'data-operation-history';
+      data: StreamingOperationHistory;
     };
 
 /**

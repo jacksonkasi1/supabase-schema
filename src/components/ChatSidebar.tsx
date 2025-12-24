@@ -6,6 +6,7 @@ import type {
   StreamingProgress,
   StreamingTablesBatch,
   StreamingNotification,
+  StreamingOperationHistory,
 } from '@/lib/types';
 
 // ** import core packages
@@ -32,13 +33,37 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable';
+import {
   X,
   ArrowUp,
+  ArrowDown,
   Paperclip,
-  MessageSquare,
   Trash2,
-  Clipboard,
-  Link,
+  Check,
+  CheckCircle2,
+  Loader2,
+  Table2,
+  Columns,
+  Edit3,
+  CircleMinus,
+  ArrowRightLeft,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Wand2,
+  Database,
+  Zap,
+  Search,
+  List,
+  StopCircle,
+  Bot,
+  User,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -47,6 +72,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { MarkdownText } from '@/components/ui/markdown-text';
 
 interface ChatSidebarProps {
   isOpen?: boolean;
@@ -57,6 +83,252 @@ interface Model {
   id: string;
   name: string;
   enabled?: boolean;
+}
+
+// Suggestions for empty state (assistant-ui style)
+const SUGGESTIONS = [
+  {
+    title: 'Create a blog schema',
+    prompt: 'Create a blog with users, posts, and comments tables',
+    icon: Database,
+    description: 'Set up a complete blog database',
+  },
+  {
+    title: 'Add timestamps',
+    prompt: 'Add created_at and updated_at columns to all tables',
+    icon: Zap,
+    description: 'Track record creation and updates',
+  },
+  {
+    title: 'E-commerce schema',
+    prompt: 'Create tables for products, orders, customers, and order_items',
+    icon: Table2,
+    description: 'Build an online store database',
+  },
+  {
+    title: 'List all tables',
+    prompt: 'Show me all the tables in my schema with their columns',
+    icon: List,
+    description: 'View your current schema',
+  },
+] as const;
+
+// Copy button with feedback
+function CopyButton({ text, className }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'h-7 w-7 text-muted-foreground hover:text-foreground',
+            className,
+          )}
+          onClick={handleCopy}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {copied ? 'Copied!' : 'Copy'}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Collapsible Tool Result Component
+function ToolResult({ tool }: { tool: any }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isComplete = !!tool.result;
+  const output = tool.result || tool.output;
+  const isSuccess = output?.ok !== false;
+
+  // Get icon based on tool name
+  const getToolIcon = (toolName: string) => {
+    switch (toolName) {
+      case 'createTable':
+        return <Table2 size={14} className="text-emerald-500" />;
+      case 'dropTable':
+        return <CircleMinus size={14} className="text-red-500" />;
+      case 'renameTable':
+        return <ArrowRightLeft size={14} className="text-blue-500" />;
+      case 'addColumn':
+        return <Columns size={14} className="text-emerald-500" />;
+      case 'dropColumn':
+        return <CircleMinus size={14} className="text-orange-500" />;
+      case 'alterColumn':
+        return <Edit3 size={14} className="text-amber-500" />;
+      case 'listTables':
+      case 'getTableDetails':
+        return <Search size={14} className="text-blue-500" />;
+      case 'listSchemas':
+        return <List size={14} className="text-purple-500" />;
+      default:
+        return <Wand2 size={14} className="text-muted-foreground" />;
+    }
+  };
+
+  // Format tool output for display
+  const getToolSummary = (toolName: string, output: any) => {
+    if (!output) return null;
+    switch (toolName) {
+      case 'createTable':
+        return output.table ? (
+          <span className="text-muted-foreground">
+            {output.table.id} ({output.table.columnCount} columns)
+          </span>
+        ) : null;
+      case 'addColumn':
+        return output.column ? (
+          <span className="text-muted-foreground">
+            {output.column} ({output.tableColumnCount} total)
+          </span>
+        ) : null;
+      case 'dropTable':
+        return output.remainingTables !== undefined ? (
+          <span className="text-muted-foreground">
+            {output.remainingTables} tables remaining
+          </span>
+        ) : null;
+      case 'listTables':
+        return output.total !== undefined ? (
+          <span className="text-muted-foreground">
+            Found {output.total} table{output.total !== 1 ? 's' : ''}
+          </span>
+        ) : null;
+      case 'listSchemas':
+        return output.total !== undefined ? (
+          <span className="text-muted-foreground">
+            Found {output.total} schema{output.total !== 1 ? 's' : ''}
+          </span>
+        ) : null;
+      default:
+        return output.message ? (
+          <span className="text-muted-foreground truncate max-w-[150px]">
+            {output.message}
+          </span>
+        ) : null;
+    }
+  };
+
+  // Get detailed output for expanded view
+  const getDetailedOutput = (toolName: string, output: any) => {
+    if (!output) return null;
+
+    // For list operations, show the items
+    if (toolName === 'listTables' && output.tables) {
+      return (
+        <div className="space-y-1">
+          {output.tables.slice(0, 10).map((t: any, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <Table2 size={12} className="text-muted-foreground" />
+              <span>{t.id || t.title}</span>
+              {t.columnCount && (
+                <Badge variant="outline" className="text-[10px] h-4">
+                  {t.columnCount} cols
+                </Badge>
+              )}
+            </div>
+          ))}
+          {output.tables.length > 10 && (
+            <span className="text-xs text-muted-foreground">
+              ...and {output.tables.length - 10} more
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (toolName === 'createTable' && output.table?.columns) {
+      return (
+        <div className="space-y-1">
+          {output.table.columns.slice(0, 8).map((col: string, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <Columns size={12} className="text-muted-foreground" />
+              <span>{col}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const detailedOutput = getDetailedOutput(tool.toolName, output);
+  const hasDetails = !!detailedOutput;
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg transition-all duration-200',
+        isComplete
+          ? isSuccess
+            ? 'bg-emerald-500/5 border border-emerald-500/20'
+            : 'bg-red-500/5 border border-red-500/20'
+          : 'bg-muted/40 border border-border/50',
+      )}
+    >
+      <button
+        onClick={() => hasDetails && setIsExpanded(!isExpanded)}
+        disabled={!hasDetails}
+        className={cn(
+          'flex items-center gap-2 w-full px-3 py-2 text-left',
+          hasDetails && 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5',
+          !hasDetails && 'cursor-default',
+        )}
+      >
+        {isComplete ? (
+          isSuccess ? (
+            <CheckCircle2
+              size={14}
+              className="text-emerald-500 flex-shrink-0"
+            />
+          ) : (
+            <X size={14} className="text-red-500 flex-shrink-0" />
+          )
+        ) : (
+          <Loader2
+            size={14}
+            className="text-primary animate-spin flex-shrink-0"
+          />
+        )}
+        {getToolIcon(tool.toolName)}
+        <span className="font-medium text-xs text-foreground">
+          {tool.toolName}
+        </span>
+        {getToolSummary(tool.toolName, output)}
+        {!isComplete && (
+          <span className="text-muted-foreground animate-pulse ml-auto text-xs">
+            running...
+          </span>
+        )}
+        {hasDetails && isComplete && (
+          <span className="ml-auto">
+            {isExpanded ? (
+              <ChevronUp size={14} className="text-muted-foreground" />
+            ) : (
+              <ChevronDown size={14} className="text-muted-foreground" />
+            )}
+          </span>
+        )}
+      </button>
+      {isExpanded && detailedOutput && (
+        <div className="px-3 pb-2 pt-1 border-t border-border/30">
+          {detailedOutput}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ChatSidebar({
@@ -147,6 +419,25 @@ export function ChatSidebar({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Track if user is at bottom of scroll
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  // Handle scroll to detect if at bottom
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setIsAtBottom(atBottom);
+  }, []);
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   // Create transport with configuration (without schema - it's passed per message)
   const transport = useMemo(
@@ -234,13 +525,27 @@ export function ChatSidebar({
           }
           break;
         }
+
+        // Phase 5.2 - Operation History for Undo/Redo support
+        case 'data-operation-history': {
+          const historyData = dataPart.data as StreamingOperationHistory;
+          console.log(
+            '[onData] Operation history received:',
+            historyData.operations.length,
+            'operations, canUndo:',
+            historyData.canUndo,
+          );
+          // TODO: Store operation history in state for future undo/redo implementation
+          // This data contains before/after state for each operation
+          break;
+        }
       }
     },
     [updateTablesFromAI],
   );
 
-  // Use Vercel AI SDK 5's useChat hook
-  const { messages, sendMessage, status, setMessages } = useChat({
+  // Use Vercel AI SDK 6's useChat hook with stop function for cancellation (Phase 5.1)
+  const { messages, sendMessage, status, setMessages, stop } = useChat({
     id: 'sql-assistant',
     transport,
     // Handle streaming data parts as they arrive
@@ -256,78 +561,62 @@ export function ChatSidebar({
       });
 
       let toolsExecuted = 0;
-      let schemaUpdated = false;
+      let schemaModifyingTools = 0;
+
+      // Atomic schema-modifying tools
+      const schemaTools = [
+        'createTable',
+        'dropTable',
+        'renameTable',
+        'addColumn',
+        'dropColumn',
+        'alterColumn',
+      ];
 
       message.parts.forEach((part: any, index: number) => {
         // Check if this is any tool call
         if (part.type?.startsWith('tool-')) {
           toolsExecuted++;
 
+          // Extract tool name from type (e.g., "tool-createTable" -> "createTable")
+          const toolName = part.type.replace('tool-', '');
+          const isSchemaModifyingTool = schemaTools.includes(toolName);
+
+          if (isSchemaModifyingTool) {
+            schemaModifyingTools++;
+          }
+
           console.log(`[onFinish] Tool ${toolsExecuted} (Part ${index}):`, {
             type: part.type,
+            toolName,
+            isSchemaModifying: isSchemaModifyingTool,
             state: part.state,
             hasOutput: !!part.output,
             hasResult: !!part.result,
-            outputKeys: part.output ? Object.keys(part.output) : [],
-            resultKeys: part.result ? Object.keys(part.result) : [],
-          });
-        }
-
-        // Check for modifySchema tool - handle different possible structures
-        const isModifyTool =
-          part.type === 'tool-modifySchema' ||
-          (part.type?.startsWith('tool-') && part.toolName === 'modifySchema');
-
-        if (!isModifyTool) return;
-
-        // Handle different output structures (SDK may use 'output' or 'result')
-        const output = part.output || part.result;
-
-        // Check if output contains tables
-        if (output && typeof output === 'object' && 'tables' in output) {
-          const tableCount = Object.keys(output.tables).length;
-          const operationCount = Array.isArray(output.operationsApplied)
-            ? output.operationsApplied.length
-            : 0;
-
-          console.log(`[onFinish] 🎯 Applying schema update:`, {
-            tableCount,
-            operationCount,
-            operations: output.operationsApplied,
           });
 
-          // Update the Zustand store with new tables
-          updateTablesFromAI(output.tables);
-          schemaUpdated = true;
-
-          // Show success toast with details
-          toast.success('Schema updated successfully', {
-            description:
-              operationCount > 0
-                ? `${operationCount} operation${operationCount === 1 ? '' : 's'} applied • ${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`
-                : `${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`,
-          });
-        } else {
-          console.warn(
-            '[onFinish] modifySchema tool found but no valid output:',
-            {
-              hasOutput: !!output,
-              outputType: typeof output,
-              hasTables: output && 'tables' in output,
-            },
-          );
+          // Handle output from atomic tools
+          const output = part.output || part.result;
+          if (output && typeof output === 'object') {
+            console.log(`[onFinish] Tool output:`, {
+              ok: output.ok,
+              message: output.message,
+            });
+          }
         }
       });
 
       console.log('[onFinish] Summary:', {
-        toolsExecuted,
-        schemaUpdated,
+        totalToolsExecuted: toolsExecuted,
+        schemaModifyingTools,
         finalTableCount: Object.keys(tables).length,
       });
 
-      if (toolsExecuted > 0 && !schemaUpdated) {
+      // Note: Schema updates are now handled by onData (streaming data-tables-batch)
+      // The onFinish handler just logs completion
+      if (schemaModifyingTools > 0) {
         console.log(
-          '[onFinish] ⚠️ Tools executed but no schema updates detected - may have been handled by onData',
+          `[onFinish] ✅ ${schemaModifyingTools} schema operation(s) completed - updates handled via streaming`,
         );
       }
     },
@@ -343,6 +632,21 @@ export function ChatSidebar({
 
   // Compute isLoading from status
   const isLoading = status === 'streaming' || status === 'submitted';
+
+  // Auto-scroll when new messages arrive (only if already at bottom)
+  useEffect(() => {
+    if (isAtBottom) {
+      scrollToBottom();
+    }
+  }, [messages, isLoading, isAtBottom, scrollToBottom]);
+
+  // Cancel handler (Phase 5.1 - Cancellation Support)
+  const handleCancel = useCallback(() => {
+    console.log('[ChatSidebar] User cancelled operation');
+    stop();
+    setStreamingProgress(null);
+    toast.info('Operation cancelled');
+  }, [stop]);
 
   const listOfTables = useMemo(() => {
     const authUserTable: Table = {
@@ -470,370 +774,516 @@ export function ChatSidebar({
   return (
     <div
       className={cn(
-        'fixed top-0 right-0 h-full w-[420px] z-[60]',
-        'bg-background/95 backdrop-blur-xl',
-        'border-l border-border',
-        'shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]',
+        'fixed top-0 right-0 h-full z-[60]',
         'transform transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : 'translate-x-full',
       )}
+      style={{ width: 'min(480px, 40vw)', minWidth: '320px' }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <MessageSquare size={20} />
-          <h2 className="font-semibold text-lg">SQL AI Assistant</h2>
-          {messages.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {messages.filter((m) => m.role === 'user').length}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {messages.length > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={clearChat}
-                    className="h-8 w-8"
-                  >
-                    <Trash2 size={16} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Clear Chat History</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setIsOpen(false);
-            }}
-            className="h-8 w-8"
-          >
-            <X size={16} />
-          </Button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="overflow-y-auto p-4 space-y-4 h-[calc(100vh-10rem)]">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <MessageSquare size={48} className="mb-4 opacity-50" />
-            <p className="text-sm">Start a conversation to generate SQL</p>
-            {listOfTables.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs mb-2">Available tables:</p>
-                <div className="flex flex-wrap gap-1 justify-center">
-                  {listOfTables.slice(0, 6).map((table) => (
-                    <Badge
-                      key={table.title}
-                      variant="outline"
-                      className="text-xs"
-                    >
-                      {table.title}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+      <ResizablePanelGroup orientation="horizontal" className="h-full">
+        {/* Resize Handle */}
+        <ResizableHandle
+          withHandle
+          className="w-2 bg-transparent hover:bg-primary/10 transition-colors"
+        />
+        <ResizablePanel defaultSize={100} minSize={30}>
+          <div
+            className={cn(
+              'h-full flex flex-col',
+              'bg-background/95 backdrop-blur-xl',
+              'border-l border-border',
+              'shadow-[-3px_0_8px_-1px_rgba(0,0,0,0.04)] dark:shadow-[-3px_0_10px_-1px_rgba(0,0,0,0.12)]',
             )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message, index) => (
-              <div key={message.id} className="space-y-2">
-                {message.role === 'user' ? (
-                  /* User message - circular bubble */
-                  <div className="flex justify-end">
-                    <div className="bg-primary text-primary-foreground rounded-full px-4 py-2 max-w-[80%]">
-                      <p className="text-sm">
-                        {message.parts
-                          .filter((p: any) => p.type === 'text')
-                          .map((p: any) => p.text)
-                          .join('')}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  /* Assistant response - simple rounded box */
-                  <div className="flex justify-start">
-                    <div className="bg-muted/50 rounded-2xl px-4 py-3 max-w-[85%] space-y-3">
-                      {/* Render text parts */}
-                      {message.parts.filter((p: any) => p.type === 'text')
-                        .length > 0 ? (
-                        message.parts.map((part: any, partIndex: number) => {
-                          if (part.type === 'text') {
-                            return (
-                              <div
-                                key={partIndex}
-                                className="text-sm whitespace-pre-wrap"
-                              >
-                                {part.text || (
-                                  <span className="text-muted-foreground animate-pulse">
-                                    Thinking...
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })
-                      ) : (
-                        <div className="text-sm text-muted-foreground italic">
-                          Tool executed (no text response generated)
-                        </div>
-                      )}
-
-                      {/* Show tool invocations if any */}
-                      {message.parts.some((p: any) => p.type === 'tool') && (
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          {message.parts
-                            .filter((part: any) => part.type === 'tool')
-                            .map((tool: any, toolIndex: number) => (
-                              <div
-                                key={toolIndex}
-                                className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
-                              >
-                                <span
-                                  className={cn(
-                                    'inline-flex h-2 w-2 rounded-full',
-                                    tool.result
-                                      ? 'bg-emerald-500'
-                                      : 'bg-amber-500 animate-pulse',
-                                  )}
-                                />
-                                <span className="font-medium">
-                                  {tool.toolName}
-                                </span>
-                                <span className="capitalize text-muted-foreground">
-                                  {tool.result ? 'completed' : 'running'}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      )}
-
-                      {/* Action buttons */}
-                      {message.parts.some((p: any) => p.type === 'text') && (
-                        <div className="flex items-center gap-2 pt-2 border-t">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Copy"
-                            onClick={async () => {
-                              const textContent = message.parts
-                                .filter((p: any) => p.type === 'text')
-                                .map((p: any) => p.text)
-                                .join('\n');
-                              await navigator.clipboard.writeText(textContent);
-                              toast.success('Copied to clipboard');
-                            }}
-                          >
-                            <Clipboard size={16} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Open SQL Editor"
-                            onClick={async () => {
-                              const textContent = message.parts
-                                .filter((p: any) => p.type === 'text')
-                                .map((p: any) => p.text)
-                                .join('\n');
-                              await navigator.clipboard.writeText(textContent);
-                              try {
-                                const projectRef = new URL(
-                                  supabaseApiKey.url,
-                                ).hostname.split('.')[0];
-                                window.open(
-                                  `https://app.supabase.com/project/${projectRef}/sql`,
-                                  '_blank',
-                                );
-                              } catch (error) {
-                                console.error('Failed to open SQL tab:', error);
-                              }
-                            }}
-                          >
-                            <Link size={16} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 ml-auto text-destructive hover:text-destructive"
-                            title="Remove"
-                            onClick={() => {
-                              setMessages(
-                                messages.filter((_, i) => i !== index),
-                              );
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border/50 bg-gradient-to-r from-background to-muted/30">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <Sparkles size={18} className="text-primary" />
+                </div>
+                <h2 className="font-semibold text-lg">Schema Assistant</h2>
+                {messages.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {messages.filter((m) => m.role === 'user').length} messages
+                  </Badge>
                 )}
               </div>
-            ))}
-          </div>
-        )}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span>
-              {streamingProgress
-                ? streamingProgress.message
-                : 'Generating response...'}
-            </span>
-            {streamingProgress && streamingProgress.total > 1 && (
-              <span className="text-xs opacity-70">
-                ({streamingProgress.current}/{streamingProgress.total})
-              </span>
-            )}
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50 bg-background/95 backdrop-blur-xl">
-        {/* Selected Files */}
-        {selectedFiles.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2">
-            {selectedFiles.map((file, index) => (
-              <Badge
-                key={index}
-                variant="secondary"
-                className="flex items-center gap-1 pr-1"
-              >
-                <span className="text-xs truncate max-w-[120px]">
-                  {file.name}
-                </span>
+              <div className="flex items-center gap-2">
+                {messages.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={clearChat}
+                          className="h-8 w-8"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Clear Chat History</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-4 w-4 rounded-full"
-                  onClick={() => removeFile(index)}
+                  onClick={() => {
+                    setIsOpen(false);
+                  }}
+                  className="h-8 w-8"
                 >
-                  <X size={10} />
+                  <X size={16} />
                 </Button>
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {/* Input Form */}
-        <TooltipProvider>
-          <form
-            onSubmit={onSubmit}
-            className="relative flex min-h-[120px] flex-col rounded-2xl border border-border shadow-lg bg-card focus-within:ring-1 focus-within:ring-ring transition-all duration-200"
-          >
-            <div className="flex-1 relative overflow-y-auto max-h-[200px]">
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask, search, or make anything..."
-                className="w-full border-0 p-3 shadow-none ring-0 ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none bg-transparent min-h-[80px] text-[15px]"
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 p-2 pb-2 mt-auto">
-              <Select
-                value={currentModelValue}
-                onValueChange={handleModelChange}
-              >
-                <SelectTrigger className="h-8 border border-input bg-background rounded-full pl-3 pr-1 py-1.5 text-xs text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground focus:ring-0 focus:ring-offset-0 transition-colors gap-1.5 w-auto inline-flex items-center justify-between">
-                  <SelectValue className="text-sm" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableOpenaiModels.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
-                        OpenAI
-                      </SelectLabel>
-                      {availableOpenaiModels.map((m) => (
-                        <SelectItem key={`openai-${m.id}`} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {availableGoogleModels.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
-                        Google
-                      </SelectLabel>
-                      {availableGoogleModels.map((m) => (
-                        <SelectItem key={`google-${m.id}`} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-
-              <div className="ml-auto flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.sql,.txt"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={handleFileButtonClick}
-                      disabled={isLoading}
-                    >
-                      <Paperclip size={18} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Attach file</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className={cn(
-                        'h-8 w-8 rounded-full transition-all duration-200',
-                        input.trim()
-                          ? 'bg-primary text-primary-foreground shadow-md'
-                          : 'bg-muted text-muted-foreground',
-                      )}
-                      disabled={isLoading || !input.trim()}
-                    >
-                      <ArrowUp size={16} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Send message</TooltipContent>
-                </Tooltip>
               </div>
             </div>
-          </form>
-        </TooltipProvider>
-      </div>
+
+            {/* Content */}
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+            >
+              {messages.length === 0 ? (
+                <div className="flex flex-col h-full">
+                  {/* Welcome Section */}
+                  <div className="flex flex-col items-center justify-center flex-1 text-center">
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 mb-4">
+                      <Wand2 size={32} className="text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Hello there!</h3>
+                    <p className="text-sm text-muted-foreground max-w-[280px]">
+                      I can help you create, modify, and explore your database
+                      schema.
+                    </p>
+
+                    {/* Current tables */}
+                    {listOfTables.length > 0 && (
+                      <div className="mt-6 w-full">
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Your tables:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 justify-center">
+                          {listOfTables.slice(0, 8).map((table) => (
+                            <Badge
+                              key={table.title}
+                              variant="outline"
+                              className="text-xs bg-background"
+                            >
+                              <Table2 size={10} className="mr-1" />
+                              {table.title}
+                            </Badge>
+                          ))}
+                          {listOfTables.length > 8 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{listOfTables.length - 8} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Suggestions */}
+                  <div className="mt-auto pb-2">
+                    <p className="text-xs text-muted-foreground mb-2 text-center">
+                      Try asking:
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {SUGGESTIONS.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setInput(suggestion.prompt)}
+                          className={cn(
+                            'flex items-start gap-3 p-3 rounded-xl text-left',
+                            'border border-border/50 bg-card/50',
+                            'hover:bg-accent hover:border-primary/30',
+                            'transition-all duration-200 group',
+                          )}
+                        >
+                          <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                            <suggestion.icon
+                              size={16}
+                              className="text-primary"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium group-hover:text-primary transition-colors">
+                              {suggestion.title}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              {suggestion.description}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {messages.map((message, index) => (
+                    <div key={message.id} className="group">
+                      {message.role === 'user' ? (
+                        /* User message - assistant-ui style */
+                        <div className="flex gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <User size={16} className="text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-muted-foreground mb-1">
+                              You
+                            </div>
+                            <div className="text-sm">
+                              {message.parts
+                                .filter((p: any) => p.type === 'text')
+                                .map((p: any) => p.text)
+                                .join('')}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Assistant response - assistant-ui style with markdown */
+                        <div className="flex gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+                            <Bot size={16} className="text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-3">
+                            <div className="text-xs font-medium text-muted-foreground mb-1">
+                              Assistant
+                            </div>
+
+                            {/* Render text parts with Markdown */}
+                            {message.parts.filter((p: any) => p.type === 'text')
+                              .length > 0 ? (
+                              message.parts.map(
+                                (part: any, partIndex: number) => {
+                                  if (part.type === 'text') {
+                                    return (
+                                      <div key={partIndex} className="text-sm">
+                                        {part.text ? (
+                                          <MarkdownText>
+                                            {part.text}
+                                          </MarkdownText>
+                                        ) : (
+                                          <span className="text-muted-foreground animate-pulse">
+                                            Thinking...
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                },
+                              )
+                            ) : (
+                              <div className="text-sm text-muted-foreground italic">
+                                Tool executed successfully
+                              </div>
+                            )}
+
+                            {/* Show tool invocations with collapsible UI */}
+                            {message.parts.some(
+                              (p: any) => p.type === 'tool',
+                            ) && (
+                              <div className="space-y-1.5 mt-2">
+                                {message.parts
+                                  .filter((part: any) => part.type === 'tool')
+                                  .map((tool: any, toolIndex: number) => (
+                                    <ToolResult key={toolIndex} tool={tool} />
+                                  ))}
+                              </div>
+                            )}
+
+                            {/* Action bar - assistant-ui style */}
+                            <div className="flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <TooltipProvider delayDuration={0}>
+                                <CopyButton
+                                  text={message.parts
+                                    .filter((p: any) => p.type === 'text')
+                                    .map((p: any) => p.text)
+                                    .join('\n')}
+                                />
+                                {supabaseApiKey?.url && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                        onClick={() => {
+                                          try {
+                                            const projectRef = new URL(
+                                              supabaseApiKey.url,
+                                            ).hostname.split('.')[0];
+                                            window.open(
+                                              `https://app.supabase.com/project/${projectRef}/sql`,
+                                              '_blank',
+                                            );
+                                          } catch (error) {
+                                            console.error(
+                                              'Failed to open SQL tab:',
+                                              error,
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <ExternalLink size={14} />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom">
+                                      Open SQL Editor
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                      onClick={() => {
+                                        setMessages(
+                                          messages.filter(
+                                            (_, i) => i !== index,
+                                          ),
+                                        );
+                                      }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom">
+                                    Delete
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isLoading && (
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+                    <Bot size={16} className="text-white animate-pulse" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Assistant
+                    </div>
+                    <div className="flex flex-col gap-2 p-3 bg-muted/30 rounded-xl border border-border/50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          <span className="text-sm">
+                            {streamingProgress
+                              ? streamingProgress.message
+                              : 'Thinking...'}
+                          </span>
+                        </div>
+                        {/* Cancel button (Phase 5.1 - Cancellation Support) */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancel}
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        >
+                          <StopCircle className="h-3.5 w-3.5 mr-1" />
+                          Cancel
+                        </Button>
+                      </div>
+                      {streamingProgress && streamingProgress.total > 1 && (
+                        <>
+                          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+                              style={{
+                                width: `${Math.min((streamingProgress.current / streamingProgress.total) * 100, 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>
+                              Step {streamingProgress.current} of{' '}
+                              {streamingProgress.total}
+                            </span>
+                            {streamingProgress.phase && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] h-5"
+                              >
+                                {streamingProgress.phase}
+                              </Badge>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Bottom padding to prevent content being hidden behind input */}
+              <div className="h-36" />
+              <div ref={chatEndRef} />
+
+              {/* Scroll to bottom button (assistant-ui style) */}
+              {!isAtBottom && messages.length > 0 && (
+                <div className="sticky bottom-4 flex justify-center pointer-events-none">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={scrollToBottom}
+                    className={cn(
+                      'h-8 w-8 rounded-full shadow-lg pointer-events-auto',
+                      'bg-background/95 backdrop-blur-sm border-border/50',
+                      'hover:bg-accent transition-all duration-200',
+                    )}
+                  >
+                    <ArrowDown size={16} />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border/50 bg-background/95 backdrop-blur-xl">
+              {/* Selected Files */}
+              {selectedFiles.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {selectedFiles.map((file, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className="flex items-center gap-1 pr-1"
+                    >
+                      <span className="text-xs truncate max-w-[120px]">
+                        {file.name}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 rounded-full"
+                        onClick={() => removeFile(index)}
+                      >
+                        <X size={10} />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Input Form */}
+              <TooltipProvider>
+                <form
+                  onSubmit={onSubmit}
+                  className="relative flex min-h-[120px] flex-col rounded-2xl border border-border shadow-lg bg-card focus-within:ring-1 focus-within:ring-ring transition-all duration-200"
+                >
+                  <div className="flex-1 relative overflow-y-auto max-h-[200px]">
+                    <Textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Ask, search, or make anything..."
+                      className="w-full border-0 p-3 shadow-none ring-0 ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none bg-transparent min-h-[80px] text-[15px]"
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 p-2 pb-2 mt-auto">
+                    <Select
+                      value={currentModelValue}
+                      onValueChange={handleModelChange}
+                    >
+                      <SelectTrigger className="h-8 border border-input bg-background rounded-full pl-3 pr-1 py-1.5 text-xs text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground focus:ring-0 focus:ring-offset-0 transition-colors gap-1.5 w-auto inline-flex items-center justify-between">
+                        <SelectValue className="text-sm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableOpenaiModels.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
+                              OpenAI
+                            </SelectLabel>
+                            {availableOpenaiModels.map((m) => (
+                              <SelectItem key={`openai-${m.id}`} value={m.id}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        {availableGoogleModels.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
+                              Google
+                            </SelectLabel>
+                            {availableGoogleModels.map((m) => (
+                              <SelectItem key={`google-${m.id}`} value={m.id}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    <div className="ml-auto flex items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,.sql,.txt"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={handleFileButtonClick}
+                            disabled={isLoading}
+                          >
+                            <Paperclip size={18} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Attach file</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="submit"
+                            size="icon"
+                            className={cn(
+                              'h-8 w-8 rounded-full transition-all duration-200',
+                              input.trim()
+                                ? 'bg-primary text-primary-foreground shadow-md'
+                                : 'bg-muted text-muted-foreground',
+                            )}
+                            disabled={isLoading || !input.trim()}
+                          >
+                            <ArrowUp size={16} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Send</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </form>
+              </TooltipProvider>
+            </div>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

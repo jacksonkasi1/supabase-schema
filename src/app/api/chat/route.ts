@@ -1,8 +1,8 @@
 import {
-  streamText,
+  ToolLoopAgent,
+  stepCountIs,
   tool,
   convertToModelMessages,
-  stepCountIs,
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from 'ai';
@@ -26,7 +26,28 @@ type CustomDataPart =
       type: 'data-notification';
       data: StreamingNotification;
       transient?: boolean;
+    }
+  | {
+      type: 'data-operation-history';
+      data: { operations: OperationRecord[]; canUndo: boolean };
     };
+
+// Operation history for undo/redo support (Phase 5.2)
+export interface OperationRecord {
+  id: string;
+  type:
+    | 'createTable'
+    | 'dropTable'
+    | 'renameTable'
+    | 'addColumn'
+    | 'dropColumn'
+    | 'alterColumn';
+  tableId: string;
+  before: Table | null;
+  after: Table | null;
+  timestamp: number;
+  description: string;
+}
 
 export const runtime = 'nodejs';
 
@@ -41,6 +62,14 @@ const cloneTables = (tables?: TableState): TableState => {
     return globalThis.structuredClone(tables);
   }
   return JSON.parse(JSON.stringify(tables)) as TableState;
+};
+
+const cloneTable = (table?: Table): Table | null => {
+  if (!table) return null;
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(table);
+  }
+  return JSON.parse(JSON.stringify(table)) as Table;
 };
 
 const parseTableIdentifier = (tableId: string) => {
@@ -67,6 +96,60 @@ const columnInputSchema = z.object({
   comment: z.string().optional(),
 });
 
+// Atomic tool params - one operation at a time
+const createTableParams = z.object({
+  tableId: z
+    .string()
+    .min(1)
+    .describe('The table identifier (e.g., "users" or "public.users")'),
+  columns: z
+    .array(columnInputSchema)
+    .min(1)
+    .describe('Array of column definitions'),
+  isView: z
+    .boolean()
+    .optional()
+    .describe('Whether this is a view instead of a table'),
+});
+
+const dropTableParams = z.object({
+  tableId: z.string().min(1).describe('The table identifier to drop'),
+});
+
+const renameTableParams = z.object({
+  fromTableId: z.string().min(1).describe('Current table identifier'),
+  toTableId: z.string().min(1).describe('New table identifier'),
+});
+
+const addColumnParams = z.object({
+  tableId: z.string().min(1).describe('The table to add column to'),
+  column: columnInputSchema.describe('Column definition'),
+});
+
+const dropColumnParams = z.object({
+  tableId: z.string().min(1).describe('The table containing the column'),
+  columnName: z.string().min(1).describe('Name of column to drop'),
+});
+
+const alterColumnParams = z.object({
+  tableId: z.string().min(1).describe('The table containing the column'),
+  columnName: z.string().min(1).describe('Name of column to alter'),
+  patch: z
+    .object({
+      title: z.string().optional(),
+      type: z.string().optional(),
+      format: z.string().optional(),
+      default: z.any().optional(),
+      required: z.boolean().optional(),
+      pk: z.boolean().optional(),
+      fk: z.string().optional(),
+      enumValues: z.array(z.string()).optional(),
+      enumTypeName: z.string().optional(),
+      comment: z.string().optional(),
+    })
+    .describe('Properties to update'),
+});
+
 const listTablesParams = z.object({
   schema: z.string().optional(),
   search: z.string().optional(),
@@ -83,144 +166,111 @@ const listSchemasParams = z.object({
   includeSystem: z.boolean().optional(),
 });
 
-const modifySchemaParams = z.object({
-  operations: z
-    .array(
-      z.discriminatedUnion('action', [
-        z.object({
-          action: z.literal('create_table'),
-          tableId: z.string().min(1),
-          columns: z.array(columnInputSchema).min(1),
-          isView: z.boolean().optional(),
-        }),
-        z.object({
-          action: z.literal('drop_table'),
-          tableId: z.string().min(1),
-        }),
-        z.object({
-          action: z.literal('rename_table'),
-          fromTableId: z.string().min(1),
-          toTableId: z.string().min(1),
-        }),
-        z.object({
-          action: z.literal('add_column'),
-          tableId: z.string().min(1),
-          column: columnInputSchema,
-        }),
-        z.object({
-          action: z.literal('drop_column'),
-          tableId: z.string().min(1),
-          columnName: z.string().min(1),
-        }),
-        z.object({
-          action: z.literal('alter_column'),
-          tableId: z.string().min(1),
-          columnName: z.string().min(1),
-          patch: columnInputSchema
-            .extend({
-              title: z.string().optional(),
-            })
-            .partial(),
-        }),
-      ]),
-    )
-    .min(1),
-});
-
-type ModifySchemaInput = z.infer<typeof modifySchemaParams>;
-
-const normaliseColumn = (input: z.infer<typeof columnInputSchema>): Column => {
-  const type = input.type ?? input.format ?? 'string';
-  const format = input.format ?? type;
+const normaliseColumn = (col: z.infer<typeof columnInputSchema>): Column => {
+  const type = col.format ?? col.type ?? 'text';
+  const format = col.type ?? col.format ?? type;
   return {
-    title: input.title,
+    title: col.title,
     type,
     format,
-    default: input.default,
-    required: input.required ?? false,
-    pk: input.pk ?? false,
-    fk: input.fk,
-    enumValues: input.enumValues,
-    enumTypeName: input.enumTypeName,
-    comment: input.comment,
+    default: col.default,
+    required: col.required ?? false,
+    pk: col.pk ?? false,
+    fk: col.fk,
+    enumValues: col.enumValues,
+    enumTypeName: col.enumTypeName,
+    comment: col.comment,
   };
 };
 
 const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
 
-**CRITICAL RULES:**
-1. ALWAYS provide a brief text response WITH EVERY tool call explaining what you're doing
-2. You can make MULTIPLE tool calls autonomously (up to 20 steps) to complete complex tasks
-3. After EACH tool result, IMMEDIATELY decide: call another tool OR provide final response
-4. NEVER leave the user waiting without a response - always explain your actions
-5. TRUST your tool results completely - if a tool returns data, it IS the current truth
+**CRITICAL: WORK INCREMENTALLY - LIKE A PROFESSIONAL IDE**
+You MUST process schema changes ONE TABLE AT A TIME. This prevents browser freezes and provides real-time feedback.
 
-**AUTONOMOUS MULTI-STEP PATTERN (like Cline):**
-Example: "add created_at and updated_at to all tables"
+**MANDATORY INCREMENTAL WORKFLOW:**
+1. For EACH table modification, make a SEPARATE tool call
+2. After EACH tool call, the result is streamed to the user immediately
+3. Continue calling tools until ALL changes are complete
+4. NEVER try to batch multiple table creations in your response
 
-Step 1: Call listTables({includeColumns: true}) + "Let me check all your tables first."
-Step 2: Analyze results, call modifySchema + "Adding the columns to 8 tables now."
-Step 3: Final response: "Done! Added created_at and updated_at to all 8 tables."
+**EXAMPLE - Creating a blog schema:**
+User: "Create a blog with users, posts, and comments"
 
-**MANDATORY RESPONSE FORMAT:**
-- ALWAYS include text explaining what you're doing, even when calling tools
-- NEVER return tool calls without accompanying text
-- Be brief but clear - the user must understand what's happening at each step
-- Continue calling tools autonomously until the task is 100% complete
+✅ CORRECT (3 separate tool calls):
+Step 1: "I'll create the tables one by one. Starting with users..."
+→ createTable({tableId: "users", columns: [...]})
 
-**Available Tools:**
-- listTables: Get all tables. Use includeColumns:true ONCE to see all column details and FK relationships
-- getTableDetails: Get specific table details (AVOID if you already called listTables with includeColumns)
+Step 2: "Users table created. Now creating posts..."
+→ createTable({tableId: "posts", columns: [...]})
+
+Step 3: "Posts table created. Finally, comments..."
+→ createTable({tableId: "comments", columns: [...]})
+
+Step 4: "Done! Created 3 tables: users (4 columns), posts (5 columns), comments (4 columns)."
+
+❌ WRONG: Trying to describe all tables in one giant response
+
+**AVAILABLE ATOMIC TOOLS:**
+- listTables: Get all tables. Use includeColumns:true for full details
+- getTableDetails: Get specific table details
 - listSchemas: List database schemas
-- modifySchema: Apply schema changes (create/drop/alter tables/columns). Returns updated state with ok:true on success.
+- createTable: Create ONE table (call multiple times for multiple tables)
+- dropTable: Drop ONE table
+- renameTable: Rename ONE table
+- addColumn: Add ONE column to a table
+- dropColumn: Remove ONE column from a table
+- alterColumn: Modify ONE column in a table
 
-**FK Relationship Detection:**
+**FK RELATIONSHIP DETECTION:**
 Column foreign keys are in the fk property: { title: "user_id", fk: "users.id" }
-When deleting a table, you must delete all tables that reference it via FK.
+When deleting a table with dependents, drop dependent tables FIRST (one at a time).
 
-**OPTIMAL CONVERSATION PATTERNS:**
+**STEP-BY-STEP PROGRESS:**
+- Always explain what you're doing at each step
+- Announce before each tool call: "Creating X table..." or "Adding Y column..."
+- After completion, summarize: "Created X with N columns"
+- For bulk operations, show progress: "Table 1/5 complete..."
 
-❌ BAD (inefficient - 4 tool calls):
-User: "delete users table"
-→ listTables()                           // Gets basic info
-→ listTables({includeColumns: true})     // Gets detailed info (redundant!)
-→ modifySchema([...])                     // Makes changes
-→ listTables()                            // Verifies (unnecessary!)
-Response: "Deleted."
+**OPTIMAL PATTERNS:**
 
-✅ GOOD (efficient - 2 tool calls):
-User: "delete users table"
-→ listTables({includeColumns: true})     // Get everything needed in ONE call
-→ modifySchema([                          // Make all changes at once
-    {action: "drop_table", tableId: "user_profiles"},
-    {action: "drop_table", tableId: "posts"},
-    {action: "drop_table", tableId: "comments"},
-    {action: "drop_table", tableId: "reactions"},
-    {action: "drop_table", tableId: "users"}
-  ])
-Response: "I've deleted the users table and 4 related tables (user_profiles, posts, comments, reactions) that had foreign keys to it. Your database now has 3 tables remaining."
-
-**More Examples:**
-
+For simple queries:
 User: "list tables"
 → listTables()
-Response: "You have 8 tables: users, posts, comments, categories, post_categories, reactions, user_profiles, and post_stats."
+Response: "You have 8 tables: users, posts, comments..."
 
-User: "show me the users table"
-→ listTables({includeColumns: true})  // Get all tables with columns (efficient for future queries)
-Response: "The users table has 9 columns: id (integer, primary key), email (varchar), username (varchar), password_hash (text), role (enum: admin/author/reader), is_active (boolean), last_login (timestamptz), created_at (timestamptz), and updated_at (timestamptz)."
+For modifications:
+User: "add email column to users"
+→ addColumn({tableId: "users", column: {title: "email", type: "string", format: "varchar"}})
+Response: "Added email column (varchar) to users table."
 
-User: "add a phone column to users"
-→ modifySchema([{action: "add_column", tableId: "users", column: {title: "phone", type: "string", format: "varchar", required: false}}])
-Response: "Added a phone column (varchar, optional) to the users table."
+For bulk operations:
+User: "add created_at and updated_at to all tables"
+1. listTables({includeColumns: true}) - "Let me check your tables..."
+2. For EACH table, call addColumn separately
+3. Provide running summary: "Added timestamps to users (1/4)... posts (2/4)..."
 
 **REMEMBER:**
-- Be efficient: minimize tool calls by getting all info in one call
-- Be confident: trust tool results and don't verify unnecessarily
-- Be clear: always explain what you did in plain English
-- Be accurate: when reporting counts, use the actual numbers from tool results`;
+- ONE table operation per tool call
+- Stream results after each operation
+- Be efficient but incremental
+- Trust your tool results completely
+- Always explain your actions clearly`;
+
+// Generate unique operation ID
+const generateOperationId = () =>
+  `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 export async function POST(req: Request) {
+  // Create abort controller for cancellation support (Phase 5.1)
+  const abortController = new AbortController();
+
+  // Forward request abort signal to our controller
+  req.signal.addEventListener('abort', () => {
+    console.log('[api/chat] Request aborted by client');
+    abortController.abort();
+  });
+
   try {
     const body = await req.json().catch(() => null);
 
@@ -235,303 +285,118 @@ export async function POST(req: Request) {
       return new Response('At least one message is required.', { status: 400 });
     }
 
-    const providerKey: keyof typeof PROVIDERS =
-      body.provider === 'google' || body.provider === 'openai'
-        ? body.provider
-        : 'openai';
-    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const providerKey = (
+      body.provider as keyof typeof PROVIDERS | undefined
+    )?.toLowerCase();
+    const apiKey = body.apiKey as string | undefined;
 
     const modelName =
-      typeof body.model === 'string' && body.model.trim().length > 0
-        ? body.model.trim()
-        : providerKey === 'google'
-          ? 'gemini-1.5-pro-latest'
-          : 'gpt-4o-mini';
+      (body.model as string | undefined) ||
+      (providerKey === 'google' ? 'models/gemini-2.5-flash' : 'gpt-4o-mini');
 
     let model;
-    try {
-      if (providerKey === 'openai') {
-        const provider = apiKey.length > 0 ? createOpenAI({ apiKey }) : openai;
-        model = provider(modelName);
-      } else {
-        const provider =
-          apiKey.length > 0 ? createGoogleGenerativeAI({ apiKey }) : google;
-        model = provider(modelName);
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to initialize model';
-      return new Response(message, { status: 400 });
+
+    if (providerKey === 'google') {
+      const provider = apiKey ? createGoogleGenerativeAI({ apiKey }) : google;
+      model = provider(modelName);
+    } else {
+      const provider = apiKey ? createOpenAI({ apiKey }) : openai;
+      model = provider(modelName);
     }
 
-    const schemaState = cloneTables(body.schema);
-    console.log(
-      `[API] 📥 Received schema with ${Object.keys(schemaState).length} tables`,
-    );
+    const message = 'API key invalid or AI provider not configured properly.';
+    if (!model) return new Response(message, { status: 400 });
 
-    const applySchemaOperations = (input: ModifySchemaInput) => {
-      let ok = true;
-      const operationsApplied: Array<{
-        action: string;
-        tableId?: string;
-        detail?: string;
-        status: 'success' | 'error';
-      }> = [];
+    // Get schema state from request body (client sends current state)
+    const schemaState: TableState = cloneTables(body.schema) || {};
 
-      for (const operation of input.operations) {
-        switch (operation.action) {
-          case 'create_table': {
-            const { schema } = parseTableIdentifier(operation.tableId);
-            const columns = operation.columns.map(normaliseColumn);
-            const existing = schemaState[operation.tableId];
+    // Track operations for progress reporting and undo/redo (Phase 5.2)
+    let operationCount = 0;
+    let totalOperations = 0;
+    const operationHistory: OperationRecord[] = [];
 
-            const table: Table = {
-              title: operation.tableId,
-              schema,
-              is_view: operation.isView ?? false,
-              columns,
-              position: existing?.position ?? { x: 0, y: 0 },
-            };
-
-            schemaState[operation.tableId] = table;
-            operationsApplied.push({
-              action: operation.action,
-              tableId: operation.tableId,
-              detail: `Created ${operation.tableId} with ${columns.length} column${
-                columns.length === 1 ? '' : 's'
-              }.`,
-              status: 'success',
-            });
-            break;
-          }
-          case 'drop_table': {
-            if (schemaState[operation.tableId]) {
-              delete schemaState[operation.tableId];
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Removed ${operation.tableId}.`,
-                status: 'success',
-              });
-            } else {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Table ${operation.tableId} not found.`,
-                status: 'error',
-              });
-            }
-            break;
-          }
-          case 'rename_table': {
-            const source = schemaState[operation.fromTableId];
-            if (!source) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.fromTableId,
-                detail: `Table ${operation.fromTableId} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            const { schema } = parseTableIdentifier(operation.toTableId);
-            const updated: Table = {
-              ...source,
-              title: operation.toTableId,
-              schema,
-            };
-
-            delete schemaState[operation.fromTableId];
-            schemaState[operation.toTableId] = updated;
-            operationsApplied.push({
-              action: operation.action,
-              tableId: operation.toTableId,
-              detail: `Renamed ${operation.fromTableId} to ${operation.toTableId}.`,
-              status: 'success',
-            });
-            break;
-          }
-          case 'add_column': {
-            const table = schemaState[operation.tableId];
-            if (!table) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Table ${operation.tableId} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            const column = normaliseColumn(operation.column);
-            const existingColumns = table.columns ?? [];
-            table.columns = [...existingColumns, column];
-            operationsApplied.push({
-              action: operation.action,
-              tableId: operation.tableId,
-              detail: `Added column ${column.title}.`,
-              status: 'success',
-            });
-            break;
-          }
-          case 'drop_column': {
-            const table = schemaState[operation.tableId];
-            if (!table || !table.columns) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Column ${operation.columnName} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            const nextColumns = table.columns.filter(
-              (column) => column.title !== operation.columnName,
-            );
-
-            if (nextColumns.length === table.columns.length) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Column ${operation.columnName} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            table.columns = nextColumns;
-            operationsApplied.push({
-              action: operation.action,
-              tableId: operation.tableId,
-              detail: `Removed column ${operation.columnName}.`,
-              status: 'success',
-            });
-            break;
-          }
-          case 'alter_column': {
-            const table = schemaState[operation.tableId];
-            if (!table || !table.columns) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Table ${operation.tableId} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            const columnIndex = table.columns.findIndex(
-              (column) => column.title === operation.columnName,
-            );
-
-            if (columnIndex === -1) {
-              ok = false;
-              operationsApplied.push({
-                action: operation.action,
-                tableId: operation.tableId,
-                detail: `Column ${operation.columnName} not found.`,
-                status: 'error',
-              });
-              break;
-            }
-
-            const originalColumn = table.columns[columnIndex];
-            const updatedColumn: Column = {
-              ...originalColumn,
-              ...operation.patch,
-            };
-
-            if (operation.patch.format && !operation.patch.type) {
-              updatedColumn.type = operation.patch.format;
-            }
-            if (operation.patch.type && !operation.patch.format) {
-              updatedColumn.format = operation.patch.type;
-            }
-
-            table.columns = table.columns.map((column, index) =>
-              index === columnIndex ? updatedColumn : column,
-            );
-
-            operationsApplied.push({
-              action: operation.action,
-              tableId: operation.tableId,
-              detail: `Updated column ${operation.columnName}.`,
-              status: 'success',
-            });
-            break;
-          }
-        }
-      }
-
-      return {
-        ok,
-        tables: cloneTables(schemaState),
-        operationsApplied,
+    // Helper to record operation for undo/redo
+    const recordOperation = (
+      type: OperationRecord['type'],
+      tableId: string,
+      before: Table | null,
+      after: Table | null,
+      description: string,
+    ): OperationRecord => {
+      const record: OperationRecord = {
+        id: generateOperationId(),
+        type,
+        tableId,
+        before: cloneTable(before ?? undefined),
+        after: cloneTable(after ?? undefined),
+        timestamp: Date.now(),
+        description,
       };
+      operationHistory.push(record);
+      return record;
     };
 
-    const tools = {
+    // Create atomic tools
+    const createAtomicTools = () => ({
       listSchemas: tool({
         description:
-          'List database schemas in the workspace. Use this only when user explicitly asks about schemas.',
+          'List all schemas in the database. Returns schemas like public, auth, storage, etc.',
         inputSchema: listSchemasParams,
-        execute: async ({
-          includeSystem,
-        }: z.infer<typeof listSchemasParams>) => {
+        execute: async ({ includeSystem = false }) => {
+          // Check for cancellation
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          // Extract unique schemas from table keys
           const schemas = new Set<string>();
-          Object.values(schemaState).forEach((table) => {
-            const schema = table.schema ?? 'public';
-            if (!includeSystem && schema.startsWith('pg_')) {
-              return;
-            }
+          Object.entries(schemaState).forEach(([key, table]) => {
+            const schema = table.schema || key.split('.')[0] || 'public';
             schemas.add(schema);
           });
+          // Always include 'public'
+          schemas.add('public');
 
           return {
-            schemas: Array.from(schemas).sort(),
+            schemas: Array.from(schemas).filter(
+              (s) =>
+                includeSystem ||
+                !['pg_catalog', 'information_schema'].includes(s),
+            ),
             total: schemas.size,
           };
         },
       }),
+
       listTables: tool({
         description:
-          'List all tables in the workspace. IMPORTANT: Use includeColumns:true to get full column details including FK relationships (column.fk property). This is more efficient than calling getTableDetails multiple times. Always explain results conversationally.',
+          'List tables in the workspace. Use includeColumns:true for column details.',
         inputSchema: listTablesParams,
-        execute: async (params: z.infer<typeof listTablesParams>) => {
-          const {
-            schema,
-            search,
-            includeColumns,
-            limit = 100,
-            offset = 0,
-          } = params;
-          const entries = Object.entries(schemaState);
-          const filtered = entries.filter(([tableId, table]) => {
-            if (schema) {
-              const tableSchema = table.schema ?? 'public';
-              if (tableSchema !== schema) {
-                return false;
-              }
-            }
+        execute: async ({
+          schema,
+          search,
+          includeColumns = false,
+          limit = 100,
+          offset = 0,
+        }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
 
+          const entries = Object.entries(schemaState);
+
+          const filtered = entries.filter(([key, table]) => {
+            const tableSchema =
+              table.schema ||
+              (key.includes('.') ? key.split('.')[0] : 'public');
+
+            // Filter by schema
+            if (schema && tableSchema !== schema) return false;
+
+            // Filter by search term
             if (search) {
-              const target = search.toLowerCase();
-              if (
-                !tableId.toLowerCase().includes(target) &&
-                !(table.columns ?? []).some((column) =>
-                  column.title.toLowerCase().includes(target),
-                )
-              ) {
-                return false;
-              }
+              const target = `${tableSchema}.${table.title}`.toLowerCase();
+              if (!target.includes(search.toLowerCase())) return false;
             }
 
             return true;
@@ -540,189 +405,531 @@ export async function POST(req: Request) {
           const sliced = filtered.slice(offset, offset + limit);
           const result = {
             total: filtered.length,
-            tables: sliced.map(([tableId, table]) => ({
-              id: tableId,
-              schema: table.schema ?? 'public',
+            tables: sliced.map(([key, table]) => ({
+              id: key,
+              schema: table.schema || 'public',
               title: table.title,
-              isView: table.is_view ?? false,
-              columnCount: table.columns?.length ?? 0,
-              columns: includeColumns ? (table.columns ?? []) : undefined,
+              isView: table.is_view || false,
+              columnCount: table.columns?.length || 0,
+              columns: includeColumns ? table.columns : undefined,
             })),
           };
 
-          console.log(
-            `[listTables] Returning ${result.tables.length} of ${result.total} tables (includeColumns: ${includeColumns})`,
-          );
+          // Update total operations estimate based on table count
+          if (result.total > 0) {
+            totalOperations = Math.max(totalOperations, result.total);
+          }
+
           return result;
         },
       }),
+
       getTableDetails: tool({
         description:
-          'Get full details of a single specific table. WARNING: If you already called listTables with includeColumns:true, DO NOT use this - you already have the data! Only use when you need details of ONE specific table.',
+          'Get detailed information about a specific table including all columns.',
         inputSchema: getTableParams,
-        execute: async ({ tableId }: z.infer<typeof getTableParams>) => {
+        execute: async ({ tableId }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
           const table = schemaState[tableId];
           if (!table) {
             return {
               ok: false,
-              message: `Table ${tableId} not found.`,
+              message: `Table '${tableId}' not found`,
             };
           }
-
           return {
             ok: true,
             table,
           };
         },
       }),
-      modifySchema: tool({
+
+      createTable: tool({
         description:
-          'Apply schema changes (create/drop/alter tables and columns). Returns the complete updated schema state with ok:true on success. IMPORTANT: After this succeeds, the changes ARE applied - do NOT call listTables to verify!',
-        inputSchema: modifySchemaParams,
-        execute: async (input: ModifySchemaInput) => {
-          const result = applySchemaOperations(input);
+          'Create a single table with columns. Call multiple times for multiple tables.',
+        inputSchema: createTableParams,
+        execute: async ({ tableId, columns, isView = false }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
 
-          // Add summary for better AI understanding
-          const successCount = result.operationsApplied.filter(
-            (op) => op.status === 'success',
-          ).length;
+          operationCount++;
+          const { schema } = parseTableIdentifier(tableId);
+          const normalizedColumns = columns.map(normaliseColumn);
+          const existing = schemaState[tableId];
 
-          console.log(
-            `[modifySchema] Applied ${successCount} of ${input.operations.length} operations. Schema now has ${Object.keys(schemaState).length} tables.`,
+          // Record before state
+          const beforeState = cloneTable(existing ?? undefined);
+
+          const table: Table = {
+            title: parseTableIdentifier(tableId).name,
+            schema: schema || 'public',
+            is_view: isView,
+            columns: normalizedColumns,
+            position: existing?.position || {
+              x: 100 + Object.keys(schemaState).length * 50,
+              y: 100 + Object.keys(schemaState).length * 50,
+            },
+          };
+
+          schemaState[tableId] = table;
+
+          // Record operation for undo
+          recordOperation(
+            'createTable',
+            tableId,
+            beforeState,
+            table,
+            `Created ${isView ? 'view' : 'table'} '${tableId}' with ${normalizedColumns.length} columns`,
           );
 
           return {
-            ...result,
-            summary: {
-              totalTables: Object.keys(schemaState).length,
-              operationsRequested: input.operations.length,
-              operationsSuccessful: successCount,
-              operationsFailed: result.operationsApplied.length - successCount,
-              message: result.ok
-                ? `Successfully applied ${successCount} operations. Database now has ${Object.keys(schemaState).length} tables.`
-                : `Failed to apply some operations. Check operationsApplied for details.`,
+            ok: true,
+            message: `Created ${isView ? 'view' : 'table'} '${tableId}'`,
+            table: {
+              id: tableId,
+              columnCount: normalizedColumns.length,
+              columns: normalizedColumns.map((c: Column) => c.title),
             },
           };
         },
       }),
-    };
 
-    // Helper to write streaming data parts
-    const writeDataPart = (
-      writer: { write: (part: CustomDataPart) => void },
-      part: CustomDataPart,
-    ) => {
-      writer.write(part);
-    };
+      dropTable: tool({
+        description:
+          'Drop a single table from the workspace. Check for dependencies first.',
+        inputSchema: dropTableParams,
+        execute: async ({ tableId }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          if (!schemaState[tableId]) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(schemaState[tableId]);
+
+          delete schemaState[tableId];
+
+          // Record operation for undo
+          recordOperation(
+            'dropTable',
+            tableId,
+            beforeState,
+            null,
+            `Dropped table '${tableId}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Dropped table '${tableId}'`,
+            remainingTables: Object.keys(schemaState).length,
+          };
+        },
+      }),
+
+      renameTable: tool({
+        description: 'Rename a table. Updates the table identifier and title.',
+        inputSchema: renameTableParams,
+        execute: async ({ fromTableId, toTableId }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const source = schemaState[fromTableId];
+          if (!source) {
+            return {
+              ok: false,
+              message: `Table '${fromTableId}' not found`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(source);
+          const { schema } = parseTableIdentifier(toTableId);
+
+          const updated: Table = {
+            ...source,
+            schema: schema || source.schema || 'public',
+            title: parseTableIdentifier(toTableId).name,
+          };
+
+          delete schemaState[fromTableId];
+          schemaState[toTableId] = updated;
+
+          // Record operation for undo
+          recordOperation(
+            'renameTable',
+            toTableId,
+            beforeState,
+            updated,
+            `Renamed table '${fromTableId}' to '${toTableId}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Renamed '${fromTableId}' to '${toTableId}'`,
+          };
+        },
+      }),
+
+      addColumn: tool({
+        description:
+          'Add a single column to a table. Call multiple times for multiple columns.',
+        inputSchema: addColumnParams,
+        execute: async ({ tableId, column }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const table = schemaState[tableId];
+          if (!table) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(table);
+          const normalizedColumn = normaliseColumn(column);
+          const existingColumns = table.columns || [];
+
+          // Check for duplicate column name
+          if (existingColumns.some((c) => c.title === normalizedColumn.title)) {
+            return {
+              ok: false,
+              message: `Column '${normalizedColumn.title}' already exists in '${tableId}'`,
+            };
+          }
+
+          table.columns = [...existingColumns, normalizedColumn];
+
+          // Record operation for undo
+          recordOperation(
+            'addColumn',
+            tableId,
+            beforeState,
+            table,
+            `Added column '${normalizedColumn.title}' to '${tableId}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Added column '${normalizedColumn.title}' to '${tableId}'`,
+            column: normalizedColumn.title,
+            tableColumnCount: table.columns.length,
+          };
+        },
+      }),
+
+      dropColumn: tool({
+        description: 'Remove a single column from a table.',
+        inputSchema: dropColumnParams,
+        execute: async ({ tableId, columnName }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const table = schemaState[tableId];
+          if (!table) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(table);
+          const originalLength = table.columns?.length || 0;
+
+          table.columns = (table.columns || []).filter(
+            (c) => c.title !== columnName,
+          );
+
+          if (table.columns.length === originalLength) {
+            return {
+              ok: false,
+              message: `Column '${columnName}' not found in '${tableId}'`,
+            };
+          }
+
+          // Record operation for undo
+          recordOperation(
+            'dropColumn',
+            tableId,
+            beforeState,
+            table,
+            `Dropped column '${columnName}' from '${tableId}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Dropped column '${columnName}' from '${tableId}'`,
+            tableColumnCount: table.columns.length,
+          };
+        },
+      }),
+
+      alterColumn: tool({
+        description: 'Modify properties of a single column.',
+        inputSchema: alterColumnParams,
+        execute: async ({ tableId, columnName, patch }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const table = schemaState[tableId];
+          if (!table) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(table);
+
+          const columnIndex = (table.columns || []).findIndex(
+            (c) => c.title === columnName,
+          );
+
+          if (columnIndex === -1) {
+            return {
+              ok: false,
+              message: `Column '${columnName}' not found in '${tableId}'`,
+            };
+          }
+
+          const originalColumn = table.columns![columnIndex];
+          const updatedColumn: Column = {
+            ...originalColumn,
+            ...Object.fromEntries(
+              Object.entries(patch).filter(([, v]) => v !== undefined),
+            ),
+          };
+
+          // Handle type/format normalization
+          if (patch.type || patch.format) {
+            updatedColumn.type =
+              patch.format ?? patch.type ?? originalColumn.type;
+            updatedColumn.format =
+              patch.type ?? patch.format ?? originalColumn.format;
+          }
+
+          table.columns![columnIndex] = updatedColumn;
+
+          // Record operation for undo
+          recordOperation(
+            'alterColumn',
+            tableId,
+            beforeState,
+            table,
+            `Altered column '${columnName}' in '${tableId}'`,
+          );
+
+          const changedProps = Object.keys(patch).filter(
+            (k) => (patch as Record<string, unknown>)[k] !== undefined,
+          );
+
+          return {
+            ok: true,
+            message: `Updated column '${columnName}' in '${tableId}'`,
+            changes: changedProps,
+          };
+        },
+      }),
+    });
+
+    // Create the ToolLoopAgent (AI SDK 6)
+    const tools = createAtomicTools();
+    const agent = new ToolLoopAgent({
+      model,
+      instructions: SYSTEM_PROMPT,
+      tools,
+      // Agent defaults to stepCountIs(20), increase for bulk operations
+      stopWhen: stepCountIs(50),
+      // Dynamic control based on step progress (Phase 4.3)
+      prepareStep: async ({ stepNumber, steps }) => {
+        // Log progress
+        console.log(
+          `[Agent Step ${stepNumber}] Previous steps: ${steps.length}, Operations: ${operationCount}`,
+        );
+
+        // After many steps, consider forcing completion
+        if (stepNumber > 40) {
+          console.log('[Agent] Approaching step limit, encouraging completion');
+          return {
+            toolChoice: 'auto' as const,
+          };
+        }
+
+        // Default behavior
+        return {};
+      },
+      onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
+        console.log(
+          `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
+            `Results: ${toolResults?.length || 0}, ` +
+            `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
+            `Finish: ${finishReason}`,
+        );
+
+        if (toolCalls) {
+          toolCalls.forEach((call, i) => {
+            console.log(`  Tool ${i + 1}: ${call.toolName}`);
+          });
+        }
+      },
+    });
 
     // Convert UIMessages to ModelMessages
-    const modelMessages = convertToModelMessages(messages);
+    const modelMessages = await convertToModelMessages(messages);
+
+    // Track last operation count for streaming updates
+    let lastStreamedOperationCount = 0;
 
     // Create a custom UI message stream with streaming data parts support
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        // Send initial notification (transient - won't be persisted in message history)
-        writeDataPart(writer, {
+        // Send initial notification
+        writer.write({
           type: 'data-notification',
           data: {
             message: 'Processing your request...',
             level: 'info',
           },
           transient: true,
-        });
+        } as CustomDataPart);
 
-        let stepCount = 0;
-        let lastTablesSnapshot: TableState | null = null;
-
-        const result = streamText({
-          model,
-          system: SYSTEM_PROMPT,
+        // Stream the agent response (agent.stream returns a Promise in AI SDK 6)
+        const result = await agent.stream({
           messages: modelMessages,
-          maxRetries: 1,
-          temperature: 0.7,
-          tools,
-          // Enable autonomous multi-step tool calling (like Cline's agentic loop)
-          stopWhen: stepCountIs(20), // AI can make up to 20 autonomous tool calls
-          onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
-            stepCount++;
-            console.log(
-              `[Step ${stepCount}] Tool calls: ${toolCalls?.length || 0}, Results: ${toolResults?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`,
-            );
-
-            if (toolCalls) {
-              toolCalls.forEach((call, i) => {
-                console.log(`  Tool ${i + 1}: ${call.toolName}`);
-
-                // Send progress notification for tool calls
-                writeDataPart(writer, {
-                  type: 'data-progress',
-                  data: {
-                    message: `Executing ${call.toolName}...`,
-                    current: stepCount,
-                    total: 20, // Max steps
-                    phase: 'processing',
-                  },
-                  transient: true,
-                });
-
-                // If modifySchema was called, send the updated tables
-                if (call.toolName === 'modifySchema') {
-                  // Check if schema state has changed
-                  const currentSnapshot = JSON.stringify(schemaState);
-                  const lastSnapshot = lastTablesSnapshot
-                    ? JSON.stringify(lastTablesSnapshot)
-                    : null;
-
-                  if (currentSnapshot !== lastSnapshot) {
-                    console.log(
-                      `[Streaming] Sending tables batch with ${Object.keys(schemaState).length} tables`,
-                    );
-
-                    // Send tables batch for incremental updates
-                    writeDataPart(writer, {
-                      type: 'data-tables-batch',
-                      id: `tables-batch-${stepCount}`,
-                      data: {
-                        tables: { ...schemaState },
-                        batchNumber: stepCount,
-                        isComplete: false,
-                      },
-                    });
-
-                    lastTablesSnapshot = { ...schemaState };
-                  }
-                }
-              });
-            }
-          },
+          abortSignal: abortController.signal,
         });
 
-        // Merge the model's stream into our custom stream
-        writer.merge(result.toUIMessageStream());
+        // Set up a periodic check for operation updates
+        const intervalId = setInterval(() => {
+          if (operationCount > lastStreamedOperationCount) {
+            // Send progress update
+            writer.write({
+              type: 'data-progress',
+              data: {
+                message: `Processing operation ${operationCount}...`,
+                current: operationCount,
+                total: Math.max(totalOperations, operationCount),
+                phase: 'processing',
+              },
+              transient: true,
+            } as CustomDataPart);
+
+            // Send updated tables state
+            writer.write({
+              type: 'data-tables-batch',
+              id: `tables-update-${operationCount}`,
+              data: {
+                tables: cloneTables(schemaState),
+                batchNumber: operationCount,
+                isComplete: false,
+              },
+            } as CustomDataPart);
+
+            lastStreamedOperationCount = operationCount;
+          }
+        }, 100);
+
+        // Merge the agent's stream into our custom stream
+        writer.merge(
+          result.toUIMessageStream({
+            sendSources: false,
+            sendReasoning: false,
+            onError: (error: unknown) => {
+              console.error('[Agent error]', error);
+              return error instanceof Error ? error.message : String(error);
+            },
+          }),
+        );
 
         // Wait for the stream to complete
-        await result.text;
+        try {
+          await result.text; // text is a promise that resolves when streaming completes
+        } catch (error: unknown) {
+          if (abortController.signal.aborted) {
+            console.log('[api/chat] Stream was cancelled');
+          } else {
+            throw error;
+          }
+        } finally {
+          clearInterval(intervalId);
+        }
 
-        // Send final tables state if there were any changes
-        if (lastTablesSnapshot) {
-          writeDataPart(writer, {
+        // Send any remaining updates
+        if (operationCount > lastStreamedOperationCount) {
+          writer.write({
+            type: 'data-progress',
+            data: {
+              message: `Completed operation ${operationCount}`,
+              current: operationCount,
+              total: operationCount,
+              phase: 'processing',
+            },
+            transient: true,
+          } as CustomDataPart);
+
+          writer.write({
+            type: 'data-tables-batch',
+            id: `tables-update-${operationCount}`,
+            data: {
+              tables: cloneTables(schemaState),
+              batchNumber: operationCount,
+              isComplete: false,
+            },
+          } as CustomDataPart);
+        }
+
+        // Send final state
+        const tableCount = Object.keys(schemaState).length;
+
+        if (operationCount > 0) {
+          // Send final tables state
+          writer.write({
             type: 'data-tables-batch',
             id: 'tables-final',
             data: {
-              tables: { ...schemaState },
-              batchNumber: stepCount + 1,
+              tables: cloneTables(schemaState),
+              batchNumber: operationCount + 1,
               isComplete: true,
             },
-          });
+          } as CustomDataPart);
 
-          writeDataPart(writer, {
+          // Send completion notification
+          writer.write({
             type: 'data-notification',
             data: {
-              message: `Schema updated with ${Object.keys(schemaState).length} tables`,
+              message: `Completed ${operationCount} operation${operationCount === 1 ? '' : 's'}. ${tableCount} table${tableCount === 1 ? '' : 's'} in workspace.`,
               level: 'success',
             },
             transient: true,
-          });
+          } as CustomDataPart);
+
+          // Send operation history for undo/redo support (Phase 5.2)
+          if (operationHistory.length > 0) {
+            writer.write({
+              type: 'data-operation-history',
+              data: {
+                operations: operationHistory,
+                canUndo: operationHistory.length > 0,
+              },
+            } as CustomDataPart);
+          }
         }
       },
     });
