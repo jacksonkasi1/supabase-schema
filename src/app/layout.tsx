@@ -22,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider defaultTheme="light" storageKey="theme">
           <RootProvider>
             <main className="w-screen h-screen relative bg-background text-foreground overflow-hidden">
