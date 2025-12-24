@@ -70,14 +70,34 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
         }
 
         // Build target table key - only include schema if present
-        const targetTableKey = targetSchema
+        const targetTableKeyWithSchema = targetSchema
           ? `${targetSchema}.${targetTableName}`
           : targetTableName;
 
-        const edgeId = `${table.title}.${column.title}-${targetTableKey}.${targetColumn}`;
+        const edgeId = `${table.title}.${column.title}-${targetTableKeyWithSchema}.${targetColumn}`;
 
-        // Find target column index in target table
-        const targetTableData = tables[targetTableKey];
+        // Try to find target table - may be stored with or without schema prefix
+        // Tables created by AI typically use just the table name as key
+        let targetTableData = tables[targetTableKeyWithSchema];
+        let actualTargetKey = targetTableKeyWithSchema;
+
+        // If not found with schema, try just the table name
+        if (!targetTableData && targetTableName) {
+          targetTableData = tables[targetTableName];
+          actualTargetKey = targetTableName;
+        }
+
+        // Also try finding by matching table.title
+        if (!targetTableData) {
+          const entry = Object.entries(tables).find(
+            ([, t]) => t.title === targetTableName
+          );
+          if (entry) {
+            targetTableData = entry[1];
+            actualTargetKey = entry[1].title; // Use title for node ID matching
+          }
+        }
+
         const targetIndex =
           targetTableData?.columns?.findIndex(
             (col) => col.title === targetColumn,
@@ -85,19 +105,20 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
 
         if (targetIndex === -1) {
           debugLog.warn(
-            `Target column ${targetColumn} not found in table ${targetTableKey}`,
+            `Target column ${targetColumn} not found in table ${actualTargetKey}`,
           );
           return;
         }
 
         // Create unique handle IDs matching TableNode format: tableName_columnName_index
+        // IMPORTANT: Use table.title for node IDs (matches tablesToNodes)
         const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
-        const targetHandleId = `${targetTableKey}_${targetColumn}_${targetIndex}`;
+        const targetHandleId = `${targetTableData.title}_${targetColumn}_${targetIndex}`;
 
         const newEdge = {
           id: edgeId,
-          source: table.title,
-          target: targetTableKey,
+          source: table.title, // Node ID uses table.title
+          target: targetTableData.title, // Node ID uses table.title (not key with schema)
           sourceHandle: sourceHandleId,
           targetHandle: targetHandleId,
           type: 'smoothstep',
@@ -118,7 +139,7 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
         debugLog.log('[tablesToEdges] Creating edge:', {
           id: edgeId,
           source: table.title,
-          target: targetTableKey,
+          target: targetTableData.title,
           sourceHandle: sourceHandleId,
           targetHandle: targetHandleId,
         });

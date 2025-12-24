@@ -23,25 +23,25 @@ type CustomDataPart =
   | { type: 'data-progress'; data: StreamingProgress; transient?: boolean }
   | { type: 'data-tables-batch'; data: StreamingTablesBatch; id?: string }
   | {
-      type: 'data-notification';
-      data: StreamingNotification;
-      transient?: boolean;
-    }
+    type: 'data-notification';
+    data: StreamingNotification;
+    transient?: boolean;
+  }
   | {
-      type: 'data-operation-history';
-      data: { operations: OperationRecord[]; canUndo: boolean };
-    };
+    type: 'data-operation-history';
+    data: { operations: OperationRecord[]; canUndo: boolean };
+  };
 
 // Operation history for undo/redo support (Phase 5.2)
 export interface OperationRecord {
   id: string;
   type:
-    | 'createTable'
-    | 'dropTable'
-    | 'renameTable'
-    | 'addColumn'
-    | 'dropColumn'
-    | 'alterColumn';
+  | 'createTable'
+  | 'dropTable'
+  | 'renameTable'
+  | 'addColumn'
+  | 'dropColumn'
+  | 'alterColumn';
   tableId: string;
   before: Table | null;
   after: Table | null;
@@ -209,6 +209,13 @@ const normaliseColumn = (col: z.infer<typeof columnInputSchema>): Column => {
 };
 
 const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
+
+**IMPORTANT: YOU MUST USE TOOLS TO PERFORM ALL OPERATIONS**
+- Do NOT output JSON, code blocks, or descriptions of what you would do.
+- ALWAYS call the appropriate tool for any schema operation.
+- To create a table, call the createTable tool. To delete a table, call the dropTable tool.
+- Never just describe what you would do - ACTUALLY DO IT by calling tools.
+- If the user asks to create, delete, modify, or list tables, USE THE TOOLS.
 
 **CRITICAL: FOREIGN KEY RELATIONSHIPS ARE MANDATORY**
 When creating related tables, you MUST ALWAYS include foreign key (fk) properties on columns that reference other tables.
@@ -952,9 +959,9 @@ export async function POST(req: Request) {
       onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
         console.log(
           `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
-            `Results: ${toolResults?.length || 0}, ` +
-            `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
-            `Finish: ${finishReason}`,
+          `Results: ${toolResults?.length || 0}, ` +
+          `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
+          `Finish: ${finishReason}`,
         );
 
         if (toolCalls) {
@@ -990,8 +997,9 @@ export async function POST(req: Request) {
           abortSignal: abortController.signal,
         });
 
-        // Set up a periodic check for operation updates
+        // Set up a periodic check for operation updates (debounced to prevent UI freeze)
         const intervalId = setInterval(() => {
+          // Only send update if new operations occurred (debounced)
           if (operationCount > lastStreamedOperationCount) {
             // Send progress update
             writer.write({
@@ -1018,7 +1026,7 @@ export async function POST(req: Request) {
 
             lastStreamedOperationCount = operationCount;
           }
-        }, 100);
+        }, 500); // Increased from 100ms to 500ms to prevent UI freezes
 
         // Merge the agent's stream into our custom stream
         writer.merge(
