@@ -5,7 +5,9 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://supabase-schema.vercel.app'),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_BASE_URL || 'https://supabase-schema.vercel.app',
+  ),
   title: 'Supabase Schema',
   description: 'Visualize your Supabase database schema',
   openGraph: {
@@ -28,7 +30,7 @@ export default function RootLayout({
             <main className="w-screen h-screen relative bg-background text-foreground overflow-hidden">
               {children}
             </main>
-            <Toaster richColors closeButton />
+            <Toaster richColors closeButton position="top-right" />
           </RootProvider>
         </ThemeProvider>
       </body>

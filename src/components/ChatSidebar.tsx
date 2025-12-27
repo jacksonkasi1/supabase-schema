@@ -94,7 +94,10 @@ const transformJsonToNaturalLanguage = (text: string): string => {
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === 'string')
+      ) {
         if (parsed.length === 0) {
           return 'There are no tables in the database.';
         }
@@ -543,7 +546,10 @@ export function ChatSidebar({
 
           // Apply tables when complete OR when there are tables to update
           // IMPORTANT: Must apply even when empty (for delete all operations)
-          if (batchData.isComplete || Object.keys(batchData.tables).length > 0) {
+          if (
+            batchData.isComplete ||
+            Object.keys(batchData.tables).length > 0
+          ) {
             updateTablesFromAI(batchData.tables);
 
             if (batchData.isComplete) {
@@ -950,11 +956,6 @@ export function ChatSidebar({
                   <Sparkles size={18} className="text-primary" />
                 </div>
                 <h2 className="font-semibold text-lg">Schema Assistant</h2>
-                {messages.length > 0 && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    {messages.filter((m) => m.role === 'user').length} messages
-                  </Badge>
-                )}
               </div>
               <div className="flex items-center gap-1">
                 {/* Undo/Redo buttons (Phase 5.2) */}
@@ -1210,7 +1211,9 @@ export function ChatSidebar({
                                       <div key={partIndex} className="text-sm">
                                         {part.text ? (
                                           <MarkdownText>
-                                            {transformJsonToNaturalLanguage(part.text)}
+                                            {transformJsonToNaturalLanguage(
+                                              part.text,
+                                            )}
                                           </MarkdownText>
                                         ) : (
                                           <span className="text-muted-foreground animate-pulse">
@@ -1233,14 +1236,14 @@ export function ChatSidebar({
                             {message.parts.some(
                               (p: any) => p.type === 'tool',
                             ) && (
-                                <div className="space-y-1.5 mt-2">
-                                  {message.parts
-                                    .filter((part: any) => part.type === 'tool')
-                                    .map((tool: any, toolIndex: number) => (
-                                      <ToolResult key={toolIndex} tool={tool} />
-                                    ))}
-                                </div>
-                              )}
+                              <div className="space-y-1.5 mt-2">
+                                {message.parts
+                                  .filter((part: any) => part.type === 'tool')
+                                  .map((tool: any, toolIndex: number) => (
+                                    <ToolResult key={toolIndex} tool={tool} />
+                                  ))}
+                              </div>
+                            )}
 
                             {/* Action bar - assistant-ui style */}
                             <div className="flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
