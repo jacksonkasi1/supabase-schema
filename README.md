@@ -35,7 +35,7 @@
 
 ## 🔗 Connection Modes
 
-When creating relationships between tables by dragging from one column to another, you can choose between two modes using the lock button in the bottom-left corner of the canvas:
+When creating relationships between tables by dragging from one column to another, you can choose between two modes using the lock button in the top-right toolbar of the app:
 
 ### 🔓 Flexible Mode (Unlock Icon)
 

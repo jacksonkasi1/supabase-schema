@@ -15,6 +15,8 @@ import {
   Plus,
   Trash2,
   X as XIcon,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import Image from 'next/image';
 import {
@@ -55,8 +57,14 @@ export function Settings({
 }: SettingsProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { supabaseApiKey, setSupabaseApiKey, setTables, autoArrange } =
-    useStore();
+  const {
+    supabaseApiKey,
+    setSupabaseApiKey,
+    setTables,
+    autoArrange,
+    connectionMode,
+    setConnectionMode,
+  } = useStore();
   const [url, setUrl] = useState(supabaseApiKey.url);
   const [anon, setAnon] = useState(supabaseApiKey.anon);
   const [connectionString, setConnectionString] = useState('');
@@ -328,7 +336,7 @@ export function Settings({
                 className={cn(
                   'text-xs truncate cursor-pointer',
                   m.enabled === false &&
-                  'text-muted-foreground line-through opacity-70',
+                    'text-muted-foreground line-through opacity-70',
                 )}
               >
                 {m.name}
@@ -363,6 +371,34 @@ export function Settings({
         >
           <Network size={20} />
         </Button>
+
+        {isToolbarVariant && (
+          <Button
+            variant="outline"
+            size="icon"
+            title={
+              connectionMode === 'flexible'
+                ? 'Flexible Mode: Any column can connect to any column. Click to switch to Strict Mode.'
+                : 'Strict Mode: Only type-compatible columns can connect. Click to switch to Flexible Mode.'
+            }
+            onClick={() =>
+              setConnectionMode(
+                connectionMode === 'flexible' ? 'strict' : 'flexible',
+              )
+            }
+            className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${
+              connectionMode === 'flexible'
+                ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+            }`}
+          >
+            {connectionMode === 'flexible' ? (
+              <Unlock size={18} />
+            ) : (
+              <Lock size={18} />
+            )}
+          </Button>
+        )}
 
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>

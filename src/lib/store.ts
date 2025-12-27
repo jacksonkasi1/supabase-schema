@@ -86,6 +86,10 @@ interface AppState {
   setEdgeRelationship: (edgeId: string, type: RelationshipType) => void;
   getEdgeRelationship: (edgeId: string) => RelationshipType;
 
+  // Connection mode (strict vs flexible)
+  connectionMode: 'strict' | 'flexible';
+  setConnectionMode: (mode: 'strict' | 'flexible') => void;
+
   // Schema grouping
   visibleSchemas: Set<string>;
   collapsedSchemas: Set<string>;
@@ -230,6 +234,7 @@ function performSave() {
     localStorage.setItem('visible-schemas', visibleSchemasJson);
     localStorage.setItem('collapsed-schemas', collapsedSchemasJson);
     localStorage.setItem('enum-types', enumTypesJson);
+    localStorage.setItem('connection-mode', state.connectionMode);
   } catch (error) {
     if (error instanceof Error && error.name === 'QuotaExceededError') {
       console.error('localStorage quota exceeded. Clearing cache...');
@@ -297,6 +302,7 @@ export const useStore = create<AppState>((set, get) => {
       last_url: '',
     },
     edgeRelationships: {},
+    connectionMode: 'flexible',
     visibleSchemas: new Set<string>(),
     collapsedSchemas: new Set<string>(),
     layoutTrigger: 0,
@@ -775,6 +781,13 @@ export const useStore = create<AppState>((set, get) => {
       }
     },
 
+    setConnectionMode: (mode) => {
+      set({ connectionMode: mode });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('connection-mode', mode);
+      }
+    },
+
     setEdgeRelationship: (edgeId, type) => {
       set((state) => ({
         edgeRelationships: {
@@ -893,6 +906,14 @@ export const useStore = create<AppState>((set, get) => {
           } catch (error) {
             console.error('Error parsing enum types from localStorage', error);
           }
+        }
+
+        const connectionModeData = localStorage.getItem('connection-mode');
+        if (
+          connectionModeData === 'strict' ||
+          connectionModeData === 'flexible'
+        ) {
+          set({ connectionMode: connectionModeData as 'strict' | 'flexible' });
         }
       } catch (error) {
         console.error('Error loading from localStorage:', error);
