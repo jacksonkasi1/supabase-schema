@@ -38,15 +38,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 // ** import assistant-ui components
 import { Thread } from '@/components/assistant-ui/thread';
@@ -342,69 +333,16 @@ export function AssistantSidebar({
       <TooltipProvider>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b min-h-[50px]">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-2 px-2 text-foreground font-semibold hover:bg-muted"
-              >
-                <Sparkles className="size-4 text-primary" />
-                <span>Assistant</span>
-                <Badge
-                  variant="outline"
-                  className="ml-1 h-5 px-1.5 text-[10px] font-normal text-muted-foreground bg-muted/50"
-                >
-                  {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
-                </Badge>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-2" align="start">
-              <div className="space-y-2">
-                <h4 className="font-medium text-xs text-muted-foreground px-2">
-                  Model Settings
-                </h4>
-                <Select
-                  value={currentModel?.id}
-                  onValueChange={handleModelChange}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select Model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>OpenAI</SelectLabel>
-                      {allModels
-                        .filter((m) => m.provider === 'openai')
-                        .map((m) => (
-                          <SelectItem
-                            key={m.id}
-                            value={m.id}
-                            className="text-xs"
-                          >
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Google</SelectLabel>
-                      {allModels
-                        .filter((m) => m.provider === 'google')
-                        .map((m) => (
-                          <SelectItem
-                            key={m.id}
-                            value={m.id}
-                            className="text-xs"
-                          >
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <div className="flex items-center gap-2 px-2">
+            <Sparkles className="size-4 text-primary" />
+            <span className="font-semibold text-sm">Assistant</span>
+            <Badge
+              variant="outline"
+              className="ml-1 h-5 px-1.5 text-[10px] font-normal text-muted-foreground bg-muted/50"
+            >
+              {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
+            </Badge>
+          </div>
 
           <div className="flex items-center gap-0.5">
             {/* Undo/Redo */}

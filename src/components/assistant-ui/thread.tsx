@@ -37,6 +37,15 @@ import {
   Zap,
 } from 'lucide-react';
 import type { FC } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export interface UnifiedModel {
   id: string;
@@ -50,7 +59,11 @@ interface ThreadProps {
   onModelChange?: (modelId: string) => void;
 }
 
-export const Thread: FC<ThreadProps> = () => {
+export const Thread: FC<ThreadProps> = ({
+  models = [],
+  currentModel,
+  onModelChange,
+}) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root @container flex h-full flex-col bg-background overflow-hidden"
@@ -76,7 +89,11 @@ export const Thread: FC<ThreadProps> = () => {
 
         <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-2xl bg-gradient-to-t from-background via-background to-transparent pb-4 px-4 pt-10">
           <ThreadScrollToBottom />
-          <Composer />
+          <Composer
+            models={models}
+            currentModel={currentModel}
+            onModelChange={onModelChange}
+          />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -186,7 +203,7 @@ const ThreadSuggestions: FC = () => {
   );
 };
 
-const Composer: FC = () => {
+const Composer: FC<ThreadProps> = ({ models, currentModel, onModelChange }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border bg-background shadow-sm transition-shadow focus-within:ring-1 focus-within:ring-ring focus-within:border-ring overflow-hidden">
@@ -202,6 +219,39 @@ const Composer: FC = () => {
         <div className="flex items-center justify-between px-3 pb-3">
           <div className="flex items-center gap-1">
             <ComposerAddAttachment />
+            {models && models.length > 0 && currentModel && onModelChange && (
+              <Select value={currentModel.id} onValueChange={onModelChange}>
+                <SelectTrigger className="h-6 w-fit gap-1.5 rounded-full border-0 bg-muted/50 px-2 text-[10px] font-medium hover:bg-muted focus:ring-0">
+                  <span className="text-muted-foreground/70">
+                    {currentModel.provider === 'google' ? 'Gemini' : 'OpenAI'}
+                  </span>
+                  <span className="w-px h-2 bg-border" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectGroup>
+                    <SelectLabel>OpenAI Models</SelectLabel>
+                    {models
+                      .filter((m) => m.provider === 'openai')
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Google Models</SelectLabel>
+                    {models
+                      .filter((m) => m.provider === 'google')
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
