@@ -1,50 +1,21 @@
+'use client';
+
 import type { ToolCallMessagePartComponent } from '@assistant-ui/react';
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  XCircleIcon,
-  Loader2Icon,
-} from 'lucide-react';
+import { CheckIcon, ChevronRightIcon, XIcon, Loader2Icon } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 // Helper to safely format result for display
 const formatResult = (result: unknown): string => {
-  if (result === undefined || result === null) {
-    return 'No result';
-  }
-
-  if (typeof result === 'string') {
-    return result;
-  }
-
-  if (typeof result === 'number' || typeof result === 'boolean') {
+  if (result === undefined || result === null) return '';
+  if (typeof result === 'string') return result;
+  if (typeof result === 'number' || typeof result === 'boolean')
+    return String(result);
+  try {
+    return JSON.stringify(result, null, 2);
+  } catch {
     return String(result);
   }
-
-  // Handle objects with common properties
-  if (typeof result === 'object') {
-    try {
-      // Check if it's an error-like object
-      if ('error' in result) {
-        return JSON.stringify(result, null, 2);
-      }
-
-      // Check if it has a text property (some SDKs return this)
-      if ('text' in result && typeof (result as any).text === 'string') {
-        return (result as any).text;
-      }
-
-      // Pretty print the object
-      return JSON.stringify(result, null, 2);
-    } catch (error) {
-      return '[Error serializing result]';
-    }
-  }
-
-  return String(result);
 };
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
@@ -53,123 +24,70 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   result,
   status,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   const isRunning = status?.type === 'running';
-  const isCancelled =
-    status?.type === 'incomplete' && status.reason === 'cancelled';
-  const isError = status?.type === 'error';
-
-  const cancelledReason =
-    isCancelled && status.error
-      ? typeof status.error === 'string'
-        ? status.error
-        : JSON.stringify(status.error)
-      : null;
-
-  const errorMessage =
-    isError && status.error
-      ? typeof status.error === 'string'
-        ? status.error
-        : JSON.stringify(status.error)
-      : null;
+  const isError = (status as any)?.type === 'error';
 
   return (
-    <div
-      className={cn(
-        'aui-tool-fallback-root mb-4 flex w-full flex-col gap-3 rounded-lg border py-3',
-        isCancelled && 'border-muted-foreground/30 bg-muted/30',
-        isError && 'border-destructive/30 bg-destructive/5',
-        isRunning && 'border-blue-500/30 bg-blue-500/5',
-      )}
-    >
-      <div className="aui-tool-fallback-header flex items-center gap-2 px-4">
-        {isCancelled ? (
-          <XCircleIcon className="aui-tool-fallback-icon size-4 text-muted-foreground" />
-        ) : isError ? (
-          <XCircleIcon className="aui-tool-fallback-icon size-4 text-destructive" />
-        ) : isRunning ? (
-          <Loader2Icon className="aui-tool-fallback-icon size-4 animate-spin text-blue-500" />
-        ) : (
-          <CheckIcon className="aui-tool-fallback-icon size-4 text-green-500" />
+    <div className="flex flex-col py-0.5">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'group flex w-fit items-center gap-1.5 rounded text-xs font-medium transition-colors hover:text-foreground',
+          isRunning
+            ? 'text-blue-500'
+            : isError
+              ? 'text-destructive'
+              : 'text-muted-foreground',
         )}
-        <p
+      >
+        {isRunning ? (
+          <Loader2Icon className="size-3 animate-spin" />
+        ) : isError ? (
+          <XIcon className="size-3" />
+        ) : (
+          <CheckIcon className="size-3" />
+        )}
+        <span className="font-mono">{toolName}</span>
+        <ChevronRightIcon
           className={cn(
-            'aui-tool-fallback-title grow text-sm',
-            isCancelled && 'text-muted-foreground line-through',
-            isError && 'text-destructive',
-            isRunning && 'text-blue-500',
+            'size-3 opacity-0 transition-all group-hover:opacity-100',
+            isOpen && 'rotate-90 opacity-100',
           )}
-        >
-          {isCancelled
-            ? 'Cancelled tool: '
-            : isRunning
-              ? 'Running tool: '
-              : isError
-                ? 'Tool error: '
-                : 'Used tool: '}
-          <b>{toolName}</b>
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-        >
-          {isCollapsed ? (
-            <ChevronUpIcon className="size-4" />
-          ) : (
-            <ChevronDownIcon className="size-4" />
-          )}
-        </Button>
-      </div>
-      {!isCollapsed && (
-        <div className="aui-tool-fallback-content flex flex-col gap-2 border-t pt-2">
-          {cancelledReason && (
-            <div className="aui-tool-fallback-cancelled-root px-4">
-              <p className="aui-tool-fallback-cancelled-header font-semibold text-muted-foreground text-xs">
-                Cancelled reason:
-              </p>
-              <p className="aui-tool-fallback-cancelled-reason text-muted-foreground text-xs">
-                {cancelledReason}
-              </p>
-            </div>
-          )}
-          {errorMessage && (
-            <div className="aui-tool-fallback-error-root px-4">
-              <p className="aui-tool-fallback-error-header font-semibold text-destructive text-xs">
-                Error:
-              </p>
-              <p className="aui-tool-fallback-error-reason text-destructive text-xs">
-                {errorMessage}
-              </p>
-            </div>
-          )}
-          <div
-            className={cn(
-              'aui-tool-fallback-args-root px-4',
-              isCancelled && 'opacity-60',
-            )}
-          >
-            <p className="font-semibold text-xs mb-1">Arguments:</p>
-            <pre className="aui-tool-fallback-args-value whitespace-pre-wrap text-xs bg-muted/30 p-2 rounded">
+        />
+      </button>
+
+      {isOpen && (
+        <div className="mt-1 flex flex-col gap-1.5 border-l-2 pl-3 text-xs">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-muted-foreground/70">
+              Input
+            </span>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-muted/50 px-2 py-1.5 font-mono text-muted-foreground">
               {argsText}
             </pre>
           </div>
-          {!isCancelled && result !== undefined && !isRunning && (
-            <div className="aui-tool-fallback-result-root border-t border-dashed px-4 pt-2">
-              <p className="aui-tool-fallback-result-header font-semibold text-xs mb-1">
-                Result:
-              </p>
-              <pre className="aui-tool-fallback-result-content whitespace-pre-wrap text-xs bg-muted/30 p-2 rounded max-h-64 overflow-auto">
-                {formatResult(result)}
+
+          {isError && (status as any).error && (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-destructive/70">Error</span>
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-destructive/10 px-2 py-1.5 font-mono text-destructive">
+                {typeof (status as any).error === 'string'
+                  ? (status as any).error
+                  : JSON.stringify((status as any).error, null, 2)}
               </pre>
             </div>
           )}
-          {isRunning && (
-            <div className="px-4 flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2Icon className="size-3 animate-spin" />
-              <span>Executing...</span>
+
+          {result && !isError && (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-muted-foreground/70">
+                Result
+              </span>
+              <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap rounded bg-muted/50 px-2 py-1.5 font-mono text-muted-foreground">
+                {formatResult(result)}
+              </pre>
             </div>
           )}
         </div>

@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 
 // ** import ui components
 import { Button } from '@/components/ui/button';
-import { X, Undo2, Redo2, History } from 'lucide-react';
+import { X, Undo2, Redo2, History, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -38,6 +38,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // ** import assistant-ui components
 import { Thread } from '@/components/assistant-ui/thread';
@@ -329,17 +338,75 @@ export function AssistantSidebar({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-[400px] min-w-[320px] max-w-[50vw] bg-background border-l shadow-xl flex flex-col">
+    <div className="fixed inset-y-0 right-0 z-40 w-[400px] min-w-[320px] max-w-[90vw] bg-background border-l shadow-2xl flex flex-col sm:max-w-[50vw]">
       <TooltipProvider>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-sm">AI Assistant</h2>
-            <Badge variant="secondary" className="text-xs">
-              {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between px-3 py-2 border-b min-h-[50px]">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-2 px-2 text-foreground font-semibold hover:bg-muted"
+              >
+                <Sparkles className="size-4 text-primary" />
+                <span>Assistant</span>
+                <Badge
+                  variant="outline"
+                  className="ml-1 h-5 px-1.5 text-[10px] font-normal text-muted-foreground bg-muted/50"
+                >
+                  {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
+                </Badge>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2" align="start">
+              <div className="space-y-2">
+                <h4 className="font-medium text-xs text-muted-foreground px-2">
+                  Model Settings
+                </h4>
+                <Select
+                  value={currentModel?.id}
+                  onValueChange={handleModelChange}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select Model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>OpenAI</SelectLabel>
+                      {allModels
+                        .filter((m) => m.provider === 'openai')
+                        .map((m) => (
+                          <SelectItem
+                            key={m.id}
+                            value={m.id}
+                            className="text-xs"
+                          >
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Google</SelectLabel>
+                      {allModels
+                        .filter((m) => m.provider === 'google')
+                        .map((m) => (
+                          <SelectItem
+                            key={m.id}
+                            value={m.id}
+                            className="text-xs"
+                          >
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex items-center gap-0.5">
             {/* Undo/Redo */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -350,7 +417,7 @@ export function AssistantSidebar({
                   onClick={handleUndo}
                   disabled={!canUndo}
                 >
-                  <Undo2 size={16} />
+                  <Undo2 className="size-4 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Undo</TooltipContent>
@@ -365,7 +432,7 @@ export function AssistantSidebar({
                   onClick={handleRedo}
                   disabled={!canRedo}
                 >
-                  <Redo2 size={16} />
+                  <Redo2 className="size-4 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Redo</TooltipContent>
@@ -380,24 +447,24 @@ export function AssistantSidebar({
                   className="h-8 w-8"
                   disabled={operationHistory.length === 0}
                 >
-                  <History size={16} />
+                  <History className="size-4 text-muted-foreground" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-2" align="end">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">History</span>
+              <PopoverContent className="w-64 p-0" align="end">
+                <div className="flex items-center justify-between p-2 border-b bg-muted/30">
+                  <span className="text-xs font-medium">History</span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={clearHistory}
-                    className="h-6 text-xs"
+                    className="h-5 text-[10px] px-2"
                   >
                     Clear
                   </Button>
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-1">
+                <div className="max-h-64 overflow-y-auto p-1">
                   {operationHistory.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2 text-center">
+                    <p className="text-xs text-muted-foreground py-4 text-center">
                       No operations yet
                     </p>
                   ) : (
@@ -405,13 +472,19 @@ export function AssistantSidebar({
                       <div
                         key={op.id}
                         className={cn(
-                          'text-xs p-2 rounded',
+                          'text-xs p-2 rounded flex flex-col gap-0.5',
                           i === historyIndex
-                            ? 'bg-primary/10'
-                            : 'hover:bg-muted',
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-muted text-muted-foreground',
                         )}
                       >
-                        <span className="text-muted-foreground">
+                        <span className="font-medium">
+                          {i === historyIndex && 'Current: '}
+                          {Object.keys(op.before || {}).length > 0
+                            ? 'Schema Update'
+                            : 'Operation'}
+                        </span>
+                        <span className="text-[10px] opacity-70">
                           {new Date(op.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
@@ -421,20 +494,22 @@ export function AssistantSidebar({
               </PopoverContent>
             </Popover>
 
+            <div className="w-px h-4 bg-border mx-1" />
+
             {/* Close */}
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
               onClick={() => setIsOpen(false)}
             >
-              <X size={16} />
+              <X className="size-4" />
             </Button>
           </div>
         </div>
 
         {/* Assistant UI Thread */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-background">
           <AssistantRuntimeProvider runtime={runtime}>
             <Thread
               models={allModels}

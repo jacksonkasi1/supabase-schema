@@ -1248,9 +1248,10 @@ export function ChatSidebar({
                                       <Reasoning
                                         key={`reasoning-${partIndex}`}
                                         text={reasoningText}
-                                        isStreaming={isCurrentlyStreaming}
-                                        defaultOpen={
-                                          isCurrentlyStreaming || isLastMessage
+                                        status={
+                                          isCurrentlyStreaming
+                                            ? { type: 'running' }
+                                            : undefined
                                         }
                                       />
                                     );
@@ -1267,8 +1268,7 @@ export function ChatSidebar({
                               ) && (
                                 <Reasoning
                                   text=""
-                                  isStreaming={true}
-                                  defaultOpen={true}
+                                  status={{ type: 'running' }}
                                 />
                               )}
 
