@@ -40,7 +40,31 @@
 
 ## 🎯 Overview
 
-**Tiger SQL** is a powerful, modern PostgreSQL schema visualizer and designer that combines intuitive visual design with AI-powered assistance. Built with Next.js 15 and React 19, it offers a seamless experience for designing, visualizing, and managing database schemas without requiring any installations or sensitive credentials.
+**Tiger SQL** is a powerful, modern PostgreSQL schema visualizer and designer that combines intuitive visual design with AI-powered assistance enhanced by the Model Context Protocol (MCP). Built with Next.js 15 and React 19, it offers a seamless experience for designing, visualizing, and managing database schemas without requiring any installations or sensitive credentials.
+
+### 🔌 MCP Integration (Model Context Protocol)
+
+Tiger SQL now features a **scalable, multi-server MCP architecture** that provides the AI assistant with up-to-date PostgreSQL knowledge and best practices:
+
+- 🧠 **PostgreSQL Expertise** - Access to official PostgreSQL documentation via semantic search
+- 📚 **Best Practices** - Curated PostgreSQL patterns and recommendations
+- 🔄 **Always Up-to-Date** - Live knowledge from MCP servers (no outdated training data)
+- 🎯 **Intelligent Routing** - Automatically decides when to use MCP based on request complexity
+- 🔧 **Extensible** - Add your own MCP servers via configuration
+- ⚡ **Production-Ready** - Built-in connection management, retry logic, and health checks
+
+**Built-in MCP Server:**
+- [pg-aiguide](https://github.com/timescale/pg-aiguide) - AI-optimized PostgreSQL expertise by Timescale
+
+**User Controls:**
+Users can control MCP behavior with special commands:
+- `[use-mcp]` - Force MCP usage for this request
+- `[skip-mcp]` - Skip MCP, use direct execution
+- `[mcp-verbose]` - Show detailed MCP queries
+- `[use-server:server-id]` - Use specific MCP server only
+- `[exclude-server:server-id]` - Exclude specific server
+
+Learn more about MCP: [Vercel AI SDK MCP Documentation](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools)
 
 ## ✨ Features
 
@@ -52,11 +76,13 @@
 - 📸 **Export to Image** - Save your schema as PNG
 - 🔍 **Zoom & Pan** - Smooth navigation with minimap support
 
-### 🤖 **AI-Powered Assistant**
+### 🤖 **AI-Powered Assistant (Enhanced with MCP)**
 - 💬 **Interactive Chat** - AI assistant to help with schema design
-- 🧠 **Smart Suggestions** - Get recommendations for table structures and relationships
-- 📝 **Context-Aware** - Understands your current schema state
+- 🧠 **Smart Suggestions** - Get recommendations powered by PostgreSQL best practices via MCP
+- 📝 **Context-Aware** - Understands your current schema state and uses up-to-date PostgreSQL knowledge
 - 🚀 **Powered by Multiple LLMs** - Support for OpenAI and Google AI
+- 🔌 **MCP Integration** - Access to real-time PostgreSQL documentation and expertise
+- 📚 **Best Practices** - Automatic guidance from curated PostgreSQL patterns
 
 ### 🔐 **Connection Modes**
 
@@ -175,12 +201,38 @@ Tiger SQL is built with modern, cutting-edge technologies:
    GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_key_here
    ```
 
-4. **Run the development server**
+4. **Configure MCP Servers** (Optional - for custom MCP servers)
+   ```bash
+   cp .mcp-config.example.json .mcp-config.json
+   ```
+   
+   The built-in pg-aiguide MCP server works out of the box. Add custom servers in `.mcp-config.json`:
+   ```json
+   {
+     "version": "1.0.0",
+     "servers": [
+       {
+         "id": "my-custom-mcp",
+         "name": "My Custom MCP Server",
+         "transport": {
+           "type": "http",
+           "url": "https://mcp.example.com"
+         },
+         "enabled": true,
+         "priority": 50,
+         "tags": ["custom"],
+         "toolNamespace": "custom_"
+       }
+     ]
+   }
+   ```
+
+5. **Run the development server**
    ```bash
    bun dev
    ```
 
-5. **Open your browser**
+6. **Open your browser**
    
    Navigate to [http://localhost:3000](http://localhost:3000)
 
@@ -193,6 +245,86 @@ Tiger SQL is built with modern, cutting-edge technologies:
 - `bun run typecheck` - Run TypeScript type checking
 - `bun run analyze` - Analyze bundle size
 - `bun run test:memory` - Run memory leak tests
+
+## 🔌 MCP Architecture
+
+Tiger SQL features a **scalable, configuration-driven MCP architecture** designed for production use:
+
+### Key Features
+
+- **Multi-Server Support** - Connect to multiple MCP servers simultaneously
+- **Configuration-Driven** - Add/remove servers via JSON config files
+- **Intelligent Routing** - Automatic tool selection based on request complexity
+- **Connection Management** - Built-in retry logic, timeouts, and health checks
+- **Tool Namespacing** - Avoid conflicts with prefixed tool names (e.g., `pg_`, `custom_`)
+- **Lifecycle Hooks** - Monitor connections and tool usage
+- **Graceful Degradation** - App works even if MCP servers are unavailable
+
+### Adding Custom MCP Servers
+
+1. **Via Configuration File** (Recommended)
+   
+   Create `.mcp-config.json` in the project root:
+   ```json
+   {
+     "version": "1.0.0",
+     "servers": [
+       {
+         "id": "my-mcp",
+         "name": "My Custom MCP",
+         "transport": {
+           "type": "http",
+           "url": "https://mcp.example.com"
+         },
+         "enabled": true,
+         "priority": 50,
+         "tags": ["custom"],
+         "toolNamespace": "custom_"
+       }
+     ]
+   }
+   ```
+
+2. **Via Code** (For Built-in Servers)
+   
+   Edit `src/lib/mcp/config.ts` and add to `BUILTIN_MCP_SERVERS`:
+   ```typescript
+   {
+     id: 'my-builtin-mcp',
+     name: 'My Built-in MCP',
+     transport: {
+       type: 'http',
+       url: 'https://mcp.example.com',
+     },
+     enabled: true,
+     priority: 50,
+     tags: ['builtin'],
+     toolNamespace: 'builtin_',
+   }
+   ```
+
+3. **Environment Variables**
+   
+   Override defaults:
+   ```env
+   MCP_CONFIG_PATH=./custom-mcp-config.json
+   MCP_DISABLE_BUILTIN=false
+   MCP_AUTO_CONNECT=true
+   MCP_TIMEOUT=10000
+   MCP_RETRY_ATTEMPTS=2
+   ```
+
+### MCP Transport Types
+
+- **HTTP** (Recommended for production) - RESTful API endpoint
+- **SSE** - Server-Sent Events for streaming
+- **Stdio** - Local servers via stdin/stdout (development only)
+
+### Learn More
+
+- [MCP Architecture Documentation](docs/MCP_INTEGRATION_PLAN.md)
+- [Vercel AI SDK MCP Guide](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools)
+- [pg-aiguide GitHub](https://github.com/timescale/pg-aiguide)
 
 ## 🤝 Contributing
 
@@ -229,6 +361,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## 🗺️ Roadmap
 
+- [x] MCP Integration - Multi-server architecture for PostgreSQL knowledge
+- [ ] Additional MCP Servers (pgvector, PostGIS, Supabase)
 - [ ] Multi-schema support
 - [ ] Collaborative editing
 - [ ] Schema versioning
@@ -236,6 +370,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 - [ ] Database connection for live schema sync
 - [ ] Template library
 - [ ] Advanced AI features (query generation, optimization)
+- [ ] MCP Server UI management (enable/disable servers from UI)
 
 See the [open issues](https://github.com/jacksonkasi1/tiger-sql/issues) for a full list of proposed features and known issues.
 
