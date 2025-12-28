@@ -6,6 +6,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
 } from 'ai';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
@@ -363,11 +364,46 @@ export async function POST(req: Request) {
       (body.model as string | undefined) ||
       (providerKey === 'google' ? 'models/gemini-2.5-flash' : 'gpt-4o-mini');
 
+    console.log('[api/chat] Model:', modelName);
+
     let model;
+    let providerOptions: ProviderOptions | undefined;
 
     if (providerKey === 'google') {
       const provider = apiKey ? createGoogleGenerativeAI({ apiKey }) : google;
       model = provider(modelName);
+
+      // Configure thinking/reasoning for Gemini models
+      // Gemini 3 models use thinkingLevel, Gemini 2.5 models use thinkingBudget
+      const isGemini3 = modelName.includes('gemini-3');
+      const isGemini25 =
+        modelName.includes('gemini-2.5') || modelName.includes('gemini-2-5');
+
+      if (isGemini3) {
+        providerOptions = {
+          google: {
+            thinkingConfig: {
+              thinkingLevel: 'low', // 'low' or 'high' for Gemini 3 Pro
+              includeThoughts: true,
+            },
+          },
+        };
+        console.log(
+          '[api/chat] Gemini 3 thinking enabled with thinkingLevel: low',
+        );
+      } else if (isGemini25) {
+        providerOptions = {
+          google: {
+            thinkingConfig: {
+              thinkingBudget: 4096, // Token budget for thinking
+              includeThoughts: true,
+            },
+          },
+        };
+        console.log(
+          '[api/chat] Gemini 2.5 thinking enabled with thinkingBudget: 4096',
+        );
+      }
     } else {
       const provider = apiKey ? createOpenAI({ apiKey }) : openai;
       model = provider(modelName);
@@ -1106,6 +1142,8 @@ export async function POST(req: Request) {
           stopWhen: stepCountIs(maxAgentSteps),
           // Provider-specific tool choice
           toolChoice: toolChoiceSetting,
+          // Pass provider options for Gemini thinking/reasoning
+          providerOptions,
           onStepFinish: ({ toolCalls, toolResults, text, finishReason }) => {
             console.log(
               `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
@@ -1132,7 +1170,7 @@ export async function POST(req: Request) {
         writer.merge(
           result.toUIMessageStream({
             sendSources: false,
-            sendReasoning: false,
+            sendReasoning: true, // Enable reasoning display for UI transparency
             onError: (error: unknown) => {
               console.error('[Agent error]', error);
               return error instanceof Error ? error.message : String(error);
