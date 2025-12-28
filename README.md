@@ -149,8 +149,7 @@ Tiger SQL is built with modern, cutting-edge technologies:
 
 ### Prerequisites
 
-- **Node.js** 18+ or **Bun** runtime
-- **npm**, **yarn**, **pnpm**, or **bun** package manager
+- **[Bun](https://bun.sh/)** runtime (v1.0+)
 
 ### Installation
 
@@ -162,12 +161,6 @@ Tiger SQL is built with modern, cutting-edge technologies:
 
 2. **Install dependencies**
    ```bash
-   npm install
-   # or
-   yarn install
-   # or
-   pnpm install
-   # or
    bun install
    ```
 
@@ -184,12 +177,6 @@ Tiger SQL is built with modern, cutting-edge technologies:
 
 4. **Run the development server**
    ```bash
-   npm run dev
-   # or
-   yarn dev
-   # or
-   pnpm dev
-   # or
    bun dev
    ```
 
@@ -199,13 +186,13 @@ Tiger SQL is built with modern, cutting-edge technologies:
 
 ### Available Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-- `npm run typecheck` - Run TypeScript type checking
-- `npm run analyze` - Analyze bundle size
-- `npm run test:memory` - Run memory leak tests
+- `bun dev` - Start development server
+- `bun run build` - Build for production
+- `bun start` - Start production server
+- `bun run lint` - Run ESLint
+- `bun run typecheck` - Run TypeScript type checking
+- `bun run analyze` - Analyze bundle size
+- `bun run test:memory` - Run memory leak tests
 
 ## 🤝 Contributing
 
