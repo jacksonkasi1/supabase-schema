@@ -25,6 +25,7 @@ import {
   createEdgeContextMenu,
 } from './ContextMenu';
 import { tablesToNodes, tablesToEdges, getAllSchemas } from '@/lib/flow-utils';
+import { HistoryLabels } from '@/lib/history';
 import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
@@ -293,6 +294,7 @@ function FlowCanvasInner() {
     visibleSchemas,
     expandTable,
     deleteTable,
+    pushHistory,
   } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -888,12 +890,31 @@ function FlowCanvasInner() {
     };
   }, [setNodes, setEdges, copySelectedTables, pasteCopiedTables]);
 
-  // Handle node drag end to sync position back to store
-  const onNodeDragStop = useCallback(
-    (_event: any, node: any) => {
-      updateTablePosition(node.id, node.position.x, node.position.y);
+  // Handle node drag start - no history push here anymore
+  // We push history AFTER the drag completes with the new positions
+  const onNodeDragStart = useCallback(
+    (_event: any, _node: any, _nodes: any[]) => {
+      // Intentionally empty - history is pushed at drag end with final positions
     },
-    [updateTablePosition],
+    [],
+  );
+
+  // Handle node drag end to sync position back to store AND push history
+  const onNodeDragStop = useCallback(
+    (_event: any, node: any, nodes: any[]) => {
+      // Update all dragged nodes' positions (handles multi-select drag)
+      nodes.forEach((n: any) => {
+        updateTablePosition(n.id, n.position.x, n.position.y);
+      });
+
+      // Push history AFTER positions are updated with the resulting state
+      if (nodes.length > 1) {
+        pushHistory(HistoryLabels.moveTables(nodes.length));
+      } else {
+        pushHistory(HistoryLabels.moveTable(node.id));
+      }
+    },
+    [updateTablePosition, pushHistory],
   );
 
   // Handle node deletion from ReactFlow (keyboard Delete/Backspace triggers this)
@@ -1369,6 +1390,7 @@ function FlowCanvasInner() {
         edges={edgesWithHighlight}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}

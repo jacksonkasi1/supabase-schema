@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { Table as TableType } from '@/lib/types';
+import { HistoryLabels } from '@/lib/history';
 import { Connector } from './Connector';
 import { createPortal } from 'react-dom';
 import { Newspaper } from 'lucide-react';
@@ -16,7 +17,13 @@ interface TableProps {
 }
 
 export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
-  const { tables, setTableHighlighted, tableSelected, updateTablePosition } = useStore();
+  const {
+    tables,
+    setTableHighlighted,
+    tableSelected,
+    updateTablePosition,
+    pushHistory,
+  } = useStore();
   const [isHover, setIsHover] = useState(false);
   const ixRef = useRef(0);
   const iyRef = useRef(0);
@@ -25,8 +32,15 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
   const position = tables[table.title]?.position || { x: 0, y: 0 };
   const headerColor = getTableHeaderColor(table.title);
 
+  // Track how many tables are being dragged for history label
+  const draggedCountRef = useRef(0);
+
   const dragStart = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only left click
+
+    // Store the count of tables being dragged for use in handleDragEnd
+    draggedCountRef.current = tableSelected.size > 0 ? tableSelected.size : 1;
+
     onTableDragging(true);
 
     const handleDragEvent = (e: MouseEvent) => {
@@ -36,20 +50,28 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
           updateTablePosition(
             tableId,
             (e.clientX - tablesSelectedRef.current[tableId].ix) / scale,
-            (e.clientY - tablesSelectedRef.current[tableId].iy) / scale
+            (e.clientY - tablesSelectedRef.current[tableId].iy) / scale,
           );
         });
       } else {
         updateTablePosition(
           table.title,
           (e.clientX - ixRef.current) / scale,
-          (e.clientY - iyRef.current) / scale
+          (e.clientY - iyRef.current) / scale,
         );
       }
     };
 
     const handleDragEnd = () => {
       onTableDragging(false);
+
+      // Push history AFTER drag completes with the resulting state
+      if (draggedCountRef.current > 1) {
+        pushHistory(HistoryLabels.moveTables(draggedCountRef.current));
+      } else {
+        pushHistory(HistoryLabels.moveTable(table.title));
+      }
+
       tablesSelectedRef.current = {};
       document.removeEventListener('mousemove', handleDragEvent);
       document.removeEventListener('mouseup', handleDragEnd);
@@ -89,15 +111,19 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
         style={{
           top: `${position.y}px`,
           left: `${position.x}px`,
-          cursor: 'grab'
+          cursor: 'grab',
         }}
         onMouseDown={dragStart}
         onMouseEnter={() => setIsHover(true)}
         onMouseLeave={() => setIsHover(false)}
       >
-        <h5 
+        <h5
           className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-gray-50 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
-          style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
+          style={{
+            borderTopWidth: '4px',
+            borderTopColor: headerColor,
+            borderTopStyle: 'solid',
+          }}
         >
           {table.is_view && (
             <Newspaper className="inline mb-1px mr-2" size={20} />
@@ -117,14 +143,16 @@ export function Table({ table, scale, mounted, onTableDragging }: TableProps) {
                 {col.format}
               </p>
             </div>
-            {mounted && col.fk && createPortal(
-              <Connector
-                svg={`svg-${table.title}.${col.title}`}
-                id={`${table.title}.${col.title}`}
-                target={col.fk}
-              />,
-              document.getElementById('canvas-children') as HTMLElement
-            )}
+            {mounted &&
+              col.fk &&
+              createPortal(
+                <Connector
+                  svg={`svg-${table.title}.${col.title}`}
+                  id={`${table.title}.${col.title}`}
+                  target={col.fk}
+                />,
+                document.getElementById('canvas-children') as HTMLElement,
+              )}
           </div>
         ))}
       </div>

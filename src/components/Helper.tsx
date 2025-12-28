@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ModalTypes } from './ModalTypes';
 import { HelperZoom } from './HelperZoom';
+import { UndoRedoButtons } from './UndoRedoButtons';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -92,8 +93,10 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
       // Include all child nodes
       filter: (node) => {
         // Exclude minimap and controls from screenshot
-        return !node.classList?.contains('react-flow__minimap') &&
-               !node.classList?.contains('react-flow__controls');
+        return (
+          !node.classList?.contains('react-flow__minimap') &&
+          !node.classList?.contains('react-flow__controls')
+        );
       },
     })
       .then((dataUrl) => {
@@ -133,7 +136,7 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
         schemaView: schemaView,
         tables: tables,
       }),
-      'this password doesnt matter'
+      'this password doesnt matter',
     ).toString();
 
     const url = new URL(window.location.href);
@@ -143,26 +146,33 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
 
   return (
     <>
-      <div 
+      <div
         className={cn(
-          "fixed right-5 bottom-5 z-40 flex items-center space-x-2",
-          "transition-all duration-300 ease-in-out",
-          isChatOpen ? "mr-[420px]" : "mr-0"
+          'fixed right-5 bottom-5 z-40 flex items-center space-x-2',
+          'transition-all duration-300 ease-in-out',
+          isChatOpen ? 'mr-[420px]' : 'mr-0',
         )}
       >
         {/* Toggle toolbar visibility button */}
         <Button
           variant="outline"
           size="icon"
-          title={isToolbarExpanded ? "Hide toolbar" : "Show toolbar"}
+          title={isToolbarExpanded ? 'Hide toolbar' : 'Show toolbar'}
           onClick={() => setIsToolbarExpanded(!isToolbarExpanded)}
         >
-          {isToolbarExpanded ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          {isToolbarExpanded ? (
+            <ChevronRight size={20} />
+          ) : (
+            <ChevronLeft size={20} />
+          )}
         </Button>
 
         {/* All other buttons - shown only when expanded */}
         {isToolbarExpanded && (
           <>
+            {/* Undo/Redo buttons */}
+            <UndoRedoButtons />
+
             <Button
               variant="outline"
               size="icon"

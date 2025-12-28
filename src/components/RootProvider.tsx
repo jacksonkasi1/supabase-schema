@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
+import { useUndoRedoShortcuts } from '@/hooks/use-undo-redo';
 import AES from 'crypto-js/aes';
 import UTF8 from 'crypto-js/enc-utf8';
 import { useRouter, usePathname } from 'next/navigation';
@@ -25,6 +26,9 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
   } = useStore();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Initialize global undo/redo keyboard shortcuts
+  useUndoRedoShortcuts();
 
   // Initialize from localStorage on mount
   useEffect(() => {
@@ -62,7 +66,7 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
         const encryptedText = hash.substring(1);
         const decryptedText = AES.decrypt(
           encryptedText,
-          'this password doesnt matter'
+          'this password doesnt matter',
         ).toString(UTF8);
         const result = JSON.parse(decryptedText);
 
