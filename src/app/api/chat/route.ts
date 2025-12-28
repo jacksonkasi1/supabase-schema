@@ -17,16 +17,22 @@ import type {
   StreamingTablesBatch,
   StreamingNotification,
 } from '@/lib/types';
+import {
+  initializeMCP,
+  getMCPToolsForRequest,
+  cleanMCPMessage,
+  isMCPAvailable,
+} from '@/lib/mcp';
 
 // Type for our custom streaming data parts
 type CustomDataPart =
   | { type: 'data-progress'; data: StreamingProgress; transient?: boolean }
   | { type: 'data-tables-batch'; data: StreamingTablesBatch; id?: string }
   | {
-    type: 'data-notification';
-    data: StreamingNotification;
-    transient?: boolean;
-  }
+      type: 'data-notification';
+      data: StreamingNotification;
+      transient?: boolean;
+    }
   | {
       type: 'data-operation-history';
       data: { operations: OperationRecord[]; canUndo: boolean };
@@ -210,6 +216,33 @@ const normaliseColumn = (col: z.infer<typeof columnInputSchema>): Column => {
 
 const SYSTEM_PROMPT = `You are an expert PostgreSQL database architect. You help users design production-quality database schemas.
 
+**MCP TOOLS (PRIORITY - USE FIRST FOR POSTGRESQL KNOWLEDGE)**
+You have access to PostgreSQL expertise via MCP (Model Context Protocol):
+
+Available MCP Tools:
+- pg_semantic_search_postgres_docs: Search official PostgreSQL documentation
+- pg_semantic_search_tiger_docs: Search TimescaleDB and extension docs
+- pg_view_skill: Access curated PostgreSQL best practices and patterns
+
+**WHEN TO USE MCP TOOLS**:
+- ALWAYS use MCP tools FIRST for:
+  * Designing new schemas (search for best practices first)
+  * Answering PostgreSQL questions (search docs)
+  * Choosing data types, constraints, indexes (view skills)
+  * Performance optimization decisions
+  * Multi-tenant, partitioning, or complex schema patterns
+
+- You MAY skip MCP tools ONLY for:
+  * Very simple direct requests ("add a column named X")
+  * Listing existing tables (use listTables)
+  * Minor modifications to existing schema
+
+**MCP WORKFLOW**:
+1. For design/architecture tasks: First use pg_view_skill or pg_semantic_search_postgres_docs
+2. Learn the best practices from MCP
+3. Then use your schema tools (createTable, etc.) to implement
+4. Apply PostgreSQL best practices from MCP to create production-quality schemas
+
 **CRITICAL: EXECUTION MODE**
 - You MUST use tools to execute ALL schema operations
 - Do NOT describe what you would do - EXECUTE IT using tools
@@ -250,7 +283,7 @@ For an e-commerce request, create tables like:
   - order_id → fk: "orders.id"
   - category_id → fk: "categories.id"
 
-**AVAILABLE TOOLS**
+**AVAILABLE SCHEMA TOOLS**
 - listTables: Get all tables (includeColumns:true for full details)
 - createTable: Create ONE table with columns
 - dropTable: Drop ONE table
@@ -259,16 +292,35 @@ For an e-commerce request, create tables like:
 - setForeignKey/removeForeignKey: Manage relationships
 
 **WORKFLOW**
-1. First call listTables to understand current schema
-2. Create parent/root tables FIRST (no FKs)
-3. Create child tables with proper FKs
-4. Confirm completion with a brief summary in natural language`;
+1. For complex tasks: Query MCP tools first for best practices
+2. Call listTables to understand current schema
+3. Create parent/root tables FIRST (no FKs)
+4. Create child tables with proper FKs
+5. Confirm completion with a brief summary in natural language`;
 
 // Generate unique operation ID
 const generateOperationId = () =>
   `op_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+// Initialize MCP on first request (lazy initialization)
+let mcpInitialized = false;
+async function ensureMCPInitialized() {
+  if (!mcpInitialized) {
+    try {
+      await initializeMCP({ autoConnect: true, loadUserConfig: true });
+      mcpInitialized = true;
+      console.log('[api/chat] MCP system initialized');
+    } catch (error) {
+      console.error('[api/chat] Failed to initialize MCP:', error);
+      // Continue without MCP - graceful degradation
+    }
+  }
+}
+
 export async function POST(req: Request) {
+  // Ensure MCP is initialized
+  await ensureMCPInitialized();
+
   // Create abort controller for cancellation support (Phase 5.1)
   const abortController = new AbortController();
 
@@ -939,8 +991,65 @@ export async function POST(req: Request) {
       }),
     });
 
-    // Create the tools
-    const tools = createAtomicTools();
+    // Get the last user message for MCP routing
+    const lastMessage = messages[messages.length - 1];
+    const userMessage =
+      typeof lastMessage?.content === 'string'
+        ? lastMessage.content
+        : JSON.stringify(lastMessage?.content || '');
+
+    // Get MCP tools based on request context
+    let mcpTools: Record<string, unknown> = {};
+    let cleanedUserMessage = userMessage;
+
+    if (isMCPAvailable()) {
+      try {
+        const mcpResult = getMCPToolsForRequest({
+          userMessage,
+          messageHistory: messages.slice(0, -1),
+          schemaState,
+        });
+
+        mcpTools = mcpResult.tools;
+        cleanedUserMessage = cleanMCPMessage(userMessage);
+
+        // Log MCP decision
+        console.log('[api/chat] MCP decision:', {
+          useMCP: mcpResult.useMCP,
+          toolCount: Object.keys(mcpTools).length,
+          reason: mcpResult.decision.reason,
+        });
+
+        // Update the last message with cleaned content if commands were present
+        if (cleanedUserMessage !== userMessage && messages.length > 0) {
+          messages[messages.length - 1] = {
+            ...messages[messages.length - 1],
+            content: cleanedUserMessage,
+          };
+        }
+      } catch (error) {
+        console.error('[api/chat] Error getting MCP tools:', error);
+        // Continue without MCP tools
+      }
+    }
+
+    // Create atomic tools (schema manipulation)
+    const atomicTools = createAtomicTools();
+
+    // Merge MCP tools with atomic tools
+    const tools = {
+      ...atomicTools,
+      ...mcpTools,
+    };
+
+    console.log(
+      '[api/chat] Total tools available:',
+      Object.keys(tools).length,
+      {
+        atomic: Object.keys(atomicTools).length,
+        mcp: Object.keys(mcpTools).length,
+      },
+    );
 
     // Convert UIMessages to ModelMessages
     const modelMessages = await convertToModelMessages(messages);
