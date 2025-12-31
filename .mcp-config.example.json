@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "servers": [
+    {
+      "id": "pg-aiguide",
+      "name": "PostgreSQL AI Guide",
+      "description": "AI-optimized PostgreSQL expertise with semantic search and best practices (built-in, pre-configured)",
+      "transport": {
+        "type": "http",
+        "url": "https://mcp.tigerdata.com/docs"
+      },
+      "enabled": true,
+      "timeout": 10000,
+      "retryAttempts": 2,
+      "priority": 100,
+      "tags": ["postgres", "database", "sql", "timescale", "ai"],
+      "toolNamespace": "pg_",
+      "capabilities": {
+        "tools": true,
+        "resources": true,
+        "prompts": false,
+        "elicitation": false
+      }
+    },
+    {
+      "id": "my-custom-mcp",
+      "name": "My Custom MCP Server",
+      "description": "Example custom MCP server configuration",
+      "transport": {
+        "type": "http",
+        "url": "https://mcp.example.com",
+        "headers": {
+          "Authorization": "Bearer YOUR_API_KEY_HERE"
+        }
+      },
+      "enabled": false,
+      "timeout": 10000,
+      "retryAttempts": 2,
+      "priority": 50,
+      "tags": ["custom", "example"],
+      "toolNamespace": "custom_",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false,
+        "elicitation": false
+      }
+    },
+    {
+      "id": "local-mcp-server",
+      "name": "Local MCP Server (Stdio)",
+      "description": "Example local MCP server using stdio transport (development only)",
+      "transport": {
+        "type": "stdio",
+        "command": "node",
+        "args": ["path/to/your/local-mcp-server.js"],
+        "env": {
+          "NODE_ENV": "development"
+        }
+      },
+      "enabled": false,
+      "timeout": 10000,
+      "retryAttempts": 1,
+      "priority": 10,
+      "tags": ["local", "development"],
+      "toolNamespace": "local_",
+      "capabilities": {
+        "tools": true,
+        "resources": false,
+        "prompts": false,
+        "elicitation": false
+      }
+    }
+  ],
+  "defaults": {
+    "timeout": 10000,
+    "retryAttempts": 2,
+    "autoConnect": true
+  }
+}
