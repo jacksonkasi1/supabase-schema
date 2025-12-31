@@ -10,8 +10,12 @@ import type {
 } from '@/lib/types';
 
 // ** import core packages
-import { useState, useMemo, useCallback, useRef } from 'react';
-import { AssistantRuntimeProvider } from '@assistant-ui/react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import {
+  AssistantRuntimeProvider,
+  useThread,
+  type ThreadMessage,
+} from '@assistant-ui/react';
 import {
   useChatRuntime,
   AssistantChatTransport,
@@ -20,6 +24,8 @@ import {
 // ** import utils
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
+import { useChatHistory } from '@/hooks/use-chat-history';
+import { getThread } from '@/lib/db/chat-db';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -41,6 +47,29 @@ import {
 
 // ** import assistant-ui components
 import { Thread } from '@/components/assistant-ui/thread';
+import { ChatHistory } from '@/components/assistant-ui/ChatHistory';
+
+// ============================================================================
+// Message Tracker Component (runs inside AssistantRuntimeProvider)
+// ============================================================================
+
+interface MessageTrackerProps {
+  onMessagesChange: (messages: ThreadMessage[]) => void;
+  children: React.ReactNode;
+}
+
+function MessageTracker({ onMessagesChange, children }: MessageTrackerProps) {
+  const messages = useThread((state) => state.messages);
+
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      // Create a mutable copy of the readonly array
+      onMessagesChange([...messages]);
+    }
+  }, [messages, onMessagesChange]);
+
+  return <>{children}</>;
+}
 
 interface AssistantSidebarProps {
   isOpen?: boolean;
@@ -96,6 +125,12 @@ export function AssistantSidebar({
     [],
   );
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Chat history state
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Initialize chat history
+  const chatHistory = useChatHistory();
 
   // Combine and unify models
   const allModels = useMemo(() => {
@@ -331,6 +366,86 @@ export function AssistantSidebar({
     transport,
   });
 
+  // Handle message updates from the Thread
+  const handleMessagesChange = useCallback(
+    (messages: ThreadMessage[]) => {
+      if (!chatHistory.isInitialized || !chatHistory.currentThreadId) return;
+
+      // Save thread with current messages
+      chatHistory.saveCurrentThread(
+        messages,
+        aiProvider,
+        aiProvider === 'google' ? googleModel : openaiModel,
+      );
+    },
+    [chatHistory, aiProvider, googleModel, openaiModel],
+  );
+
+  // Create new thread when sidebar opens if no current thread
+  useEffect(() => {
+    if (isOpen && !chatHistory.currentThreadId && chatHistory.isInitialized) {
+      // Check if we have any threads in history
+      if (chatHistory.threads.length > 0) {
+        // Set the most recent thread as current
+        const recentThreadId = chatHistory.threads[0].id;
+        chatHistory.setCurrentThreadId(recentThreadId);
+
+        // Sync runtime
+        getThread(recentThreadId).then((thread) => {
+          if (thread) {
+            const r = runtime as any;
+            if (r.thread?.reset) {
+              r.thread.reset(thread.messages);
+            } else if (r.reset) {
+              r.reset({ messages: thread.messages });
+            }
+          }
+        });
+      } else {
+        // Create a new thread if no history exists
+        chatHistory.createNewThread();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, chatHistory.isInitialized]);
+
+  // Chat history handlers
+  const handleNewThread = useCallback(() => {
+    // Switch to a new thread in the runtime (clears messages)
+    runtime.switchToNewThread();
+    // Create new thread ID in chat history
+    chatHistory.createNewThread();
+    // Go back to chat view
+    setShowHistory(false);
+  }, [chatHistory, runtime]);
+
+  const handleSelectThread = useCallback(
+    async (threadId: string) => {
+      chatHistory.setCurrentThreadId(threadId);
+
+      // Sync runtime
+      const thread = await getThread(threadId);
+      if (thread) {
+        const r = runtime as any;
+        if (r.thread?.reset) {
+          r.thread.reset(thread.messages);
+        } else if (r.reset) {
+          r.reset({ messages: thread.messages });
+        }
+      }
+
+      setShowHistory(false);
+    },
+    [chatHistory, runtime],
+  );
+
+  const handleDeleteThread = useCallback(
+    async (threadId: string) => {
+      await chatHistory.deleteThread(threadId);
+    },
+    [chatHistory],
+  );
+
   // Undo/Redo handlers
   const canUndo = historyIndex >= 0;
   const canRedo =
@@ -393,137 +508,175 @@ export function AssistantSidebar({
     setHistoryIndex(-1);
   }, []);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-y-0 right-0 z-[60] w-[400px] min-w-[320px] max-w-[90vw] bg-background border-l shadow-2xl flex flex-col sm:max-w-[50vw]">
-      <TooltipProvider>
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b min-h-[50px]">
-          <div className="flex items-center gap-2 px-2">
-            <Sparkles className="size-4 text-primary" />
-            <span className="font-semibold text-sm">Assistant</span>
-            <Badge
-              variant="outline"
-              className="ml-1 h-5 px-1.5 text-[10px] font-normal text-muted-foreground bg-muted/50"
-            >
-              {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
-            </Badge>
-          </div>
+    <div
+      className={cn(
+        'fixed inset-y-0 right-0 z-[60] w-[400px] min-w-[320px] max-w-[90vw] bg-background border-l shadow-2xl flex flex-col sm:max-w-[50vw] transition-transform duration-300',
+        isOpen ? 'translate-x-0' : 'translate-x-full',
+      )}
+    >
+      <AssistantRuntimeProvider runtime={runtime}>
+        <MessageTracker onMessagesChange={handleMessagesChange}>
+          <TooltipProvider>
+            {showHistory ? (
+              <ChatHistory
+                threads={chatHistory.threads}
+                recentThreads={chatHistory.recentThreads}
+                currentThreadId={chatHistory.currentThreadId}
+                isLoading={chatHistory.isLoading}
+                onSelectThread={handleSelectThread}
+                onDeleteThread={handleDeleteThread}
+                onNewThread={handleNewThread}
+                onSearch={chatHistory.searchThreads}
+                onClearHistory={chatHistory.clearHistory}
+                onBack={() => setShowHistory(false)}
+                groupThreadsByTime={chatHistory.groupThreadsByTime}
+              />
+            ) : (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between px-3 py-2 border-b min-h-[50px]">
+                  <div className="flex items-center gap-2 px-2">
+                    <Sparkles className="size-4 text-primary" />
+                    <span className="font-semibold text-sm">Assistant</span>
+                    <Badge
+                      variant="outline"
+                      className="ml-1 h-5 px-1.5 text-[10px] font-normal text-muted-foreground bg-muted/50"
+                    >
+                      {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
+                    </Badge>
+                  </div>
 
-          <div className="flex items-center gap-0.5">
-            {/* Undo/Redo */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                >
-                  <Undo2 className="size-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Undo</TooltipContent>
-            </Tooltip>
+                  <div className="flex items-center gap-0.5">
+                    {/* History Button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setShowHistory(true)}
+                        >
+                          <History className="size-4 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Chat History</TooltipContent>
+                    </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                >
-                  <Redo2 className="size-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Redo</TooltipContent>
-            </Tooltip>
+                    {/* Undo/Redo */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleUndo}
+                          disabled={!canUndo}
+                        >
+                          <Undo2 className="size-4 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Undo</TooltipContent>
+                    </Tooltip>
 
-            {/* History */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={operationHistory.length === 0}
-                >
-                  <History className="size-4 text-muted-foreground" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" align="end">
-                <div className="flex items-center justify-between p-2 border-b bg-muted/30">
-                  <span className="text-xs font-medium">History</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearHistory}
-                    className="h-5 text-[10px] px-2"
-                  >
-                    Clear
-                  </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleRedo}
+                          disabled={!canRedo}
+                        >
+                          <Redo2 className="size-4 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Redo</TooltipContent>
+                    </Tooltip>
+
+                    {/* History */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={operationHistory.length === 0}
+                        >
+                          <History className="size-4 text-muted-foreground" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-0" align="end">
+                        <div className="flex items-center justify-between p-2 border-b bg-muted/30">
+                          <span className="text-xs font-medium">History</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearHistory}
+                            className="h-5 text-[10px] px-2"
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto p-1">
+                          {operationHistory.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-4 text-center">
+                              No operations yet
+                            </p>
+                          ) : (
+                            operationHistory.map((op, i) => (
+                              <div
+                                key={op.id}
+                                className={cn(
+                                  'text-xs p-2 rounded flex flex-col gap-0.5',
+                                  i === historyIndex
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted text-muted-foreground',
+                                )}
+                              >
+                                <span className="font-medium">
+                                  {i === historyIndex && 'Current: '}
+                                  {Object.keys(op.before || {}).length > 0
+                                    ? 'Schema Update'
+                                    : 'Operation'}
+                                </span>
+                                <span className="text-[10px] opacity-70">
+                                  {new Date(op.timestamp).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    {/* Close */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto p-1">
-                  {operationHistory.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-4 text-center">
-                      No operations yet
-                    </p>
-                  ) : (
-                    operationHistory.map((op, i) => (
-                      <div
-                        key={op.id}
-                        className={cn(
-                          'text-xs p-2 rounded flex flex-col gap-0.5',
-                          i === historyIndex
-                            ? 'bg-primary/10 text-primary'
-                            : 'hover:bg-muted text-muted-foreground',
-                        )}
-                      >
-                        <span className="font-medium">
-                          {i === historyIndex && 'Current: '}
-                          {Object.keys(op.before || {}).length > 0
-                            ? 'Schema Update'
-                            : 'Operation'}
-                        </span>
-                        <span className="text-[10px] opacity-70">
-                          {new Date(op.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    ))
-                  )}
+
+                {/* Assistant UI Thread */}
+                <div className="flex-1 overflow-hidden bg-background">
+                  <Thread
+                    models={allModels}
+                    currentModel={currentModel}
+                    onModelChange={handleModelChange}
+                  />
                 </div>
-              </PopoverContent>
-            </Popover>
-
-            <div className="w-px h-4 bg-border mx-1" />
-
-            {/* Close */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setIsOpen(false)}
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Assistant UI Thread */}
-        <div className="flex-1 overflow-hidden bg-background">
-          <AssistantRuntimeProvider runtime={runtime}>
-            <Thread
-              models={allModels}
-              currentModel={currentModel}
-              onModelChange={handleModelChange}
-            />
-          </AssistantRuntimeProvider>
-        </div>
-      </TooltipProvider>
+              </>
+            )}
+          </TooltipProvider>
+        </MessageTracker>
+      </AssistantRuntimeProvider>
     </div>
   );
 }
